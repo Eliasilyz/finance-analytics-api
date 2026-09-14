@@ -61,3 +61,10 @@
 ## Open Items
 See OPEN_ITEMS.md for tracked verification items. Current open item:
 - Phase 1 Docker Compose smoke test (`/health` returns 200) — Docker daemon unavailable, must verify before Phase 8.
+
+
+### 15. Integration test infra: testcontainers-go KONFIRMASI tetap dipakai (clarification 2026-09-15)
+- Klarifikasi: selama Phase 2 pengembangan sempat dibuat draft test berbasis DSN env (TEST_DATABASE_URL) yang mengharuskan Postgres lokal manual. Itu PENYIMPANGAN sementara dan TIDAK dipakai dan TIDAK di-commit. Disadari bukan keputusan sendiri sehingga ditanyakan ke user; user menegaskan testcontainers-go tetap approach yang benar (tidak perlu password/DB manual).
+- Keputusan final: integration test memakai testcontainers-go (module postgres), memerlukan Docker daemon hidup (local dev: Docker Desktop; CI: GitHub-hosted runner sudah punya daemon, tanpa setup DinD tambahan). Test men-spawn postgres:16-alpine sendiri, apply migrations via golang-migrate (source file), verifikasi unique violation (SQLSTATE 23505), lalu migrate down.
+- Alasan DSN-env ditolak: butuh setup DB/password manual di luar kontrol repo, gagal memenuhi janji testcontainers, dan tidak portabel antar developer.
+- Opsi lain ditolak: go-redis/v8; miniredis; mockery/gomock (code-gen overhead).

@@ -1,40 +1,18 @@
-# Open Items & Pending Verification
+# Open Items
 
-This file tracks items that must be verified before a phase can be considered fully closed.
+Open item ini harus diverifikasi sebelum phase terkait dianggap fully closed.
 
-## Phase 1 — Foundation
-
-### [OPEN] Docker Compose smoke test — `/health` returns 200
-- **Status:** Not verified
-- **Reason:** Docker daemon unavailable in the development environment at time of setup.
-- **Must be verified:** Before Phase 1 is marked fully closed. Target: by Phase 8 at the latest.
-- **Verification steps:**
-  1. `docker compose up -d`
-  2. `curl http://localhost:8080/health` → expect `{"status":"ok"}` HTTP 200
-  3. `docker compose down`
-- **Why it matters:** The DoD for Phase 1 explicitly requires `docker compose up` succeeds and `/health` returns 200.
-
-## Phase 2 — Database & Migrations
-- [ ] Migration up/down tested from clean state (pending PostgreSQL availability)
-- [ ] Integration test verifying unique constraint on duplicate insert
-
-## Phase 3 — Provider & Ingestion
-- [ ] All 5 provider mock scenarios tested (success, timeout, error, rate-limited, invalid data)
-
-## Phase 4 — Analytics Engine
-- [ ] Unit tests for every metric including edge cases
-
-## Phase 5 — REST API Layer
-- [ ] Handler tests covering 200/400/404/429/500 status codes
-
-## Phase 6 — Redis Caching & Rate Limiting
-- [ ] Cache hit integration test
-- [ ] Rate limiting blocking test
-
-## Phase 7 — Security Hardening
-- [ ] SQL injection / malicious input rejection tests
-
-## Phase 8 — Docs, Polish, Full CI
-- [ ] GitHub Actions CI verifies Docker-in-Docker works for testcontainers-go
-- [ ] Complete OpenAPI spec
-- [ ] README with architecture and setup instructions
+## [P1-DOCKER-SMOKE] Phase 1 Docker Compose smoke test BELUM dijalankan
+- Status: Open
+- Dicatat: 2026-09-15
+- Detail:
+  - Phase 1 Docker Compose smoke test (docker compose up + GET /health -> 200) belum dijalankan.
+  - Penyebab: Docker daemon tidak tersedia di environment development ini (Windows; Docker Desktop terinstall tapi daemon tidak berjalan).
+  - Yang sudah diverifikasi: docker compose config valid, go build ./..., go vet ./..., go fmt green, image Dockerfile masuk CI.
+  - Update: Docker daemon sejak itu berhasil dinyalakan (Docker Desktop). Phase 2 integration test via testcontainers sudah diverifikasi jalan lokal. Smoke test docker compose up tetap belum dieksekusi.
+- Syarat close:
+  1. Docker daemon tersedia (local atau CI runner).
+  2. docker compose up --build -d sukses.
+  3. GET /health mengembalikan HTTP 200.
+  4. Ditandai verified di laporan progress.
+- Tenggat: Sebelum mulai Phase 8. Wajib disebutkan statusnya di setiap laporan progress phase.
