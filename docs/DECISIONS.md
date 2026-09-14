@@ -56,3 +56,8 @@
 
 ### 14. Migrations: explicit SQL files
 - Why: Auditable, reviewable, up/down.
+
+
+## Open Items
+See OPEN_ITEMS.md for tracked verification items. Current open item:
+- Phase 1 Docker Compose smoke test (`/health` returns 200) — Docker daemon unavailable, must verify before Phase 8.
