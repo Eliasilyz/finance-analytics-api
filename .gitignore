@@ -1,0 +1,48 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Build
+/bin/
+/dist/
+*.egg-info/
+
+# Dependencies
+/vendor/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+/testdata/
+*.test
+*.out
+coverage.html
+coverage.out
+
+# Docker
+docker-compose.override.yml
+
+# Misc
+*.md.bak
+*.bak
+
+# Go
+**/vendor/
+**/node_modules/
