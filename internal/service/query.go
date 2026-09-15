@@ -29,6 +29,7 @@ type QueryStore interface {
 	GetIncomeStatements(ctx context.Context, symbol, period string) ([]models.IncomeStatement, error)
 	GetBalanceSheets(ctx context.Context, symbol, period string) ([]models.BalanceSheet, error)
 	GetCashFlows(ctx context.Context, symbol, period string) ([]models.CashFlow, error)
+	Screener(ctx context.Context, filter models.ScreenerFilter) ([]models.ScreenerResult, error)
 }
 
 // QueryService is the read-side service behind the REST API: it validates

@@ -68,6 +68,10 @@ func (f *fakeQueryStore) GetCashFlows(_ context.Context, _ string, _ string) ([]
 	return f.flows, nil
 }
 
+func (f *fakeQueryStore) Screener(_ context.Context, _ models.ScreenerFilter) ([]models.ScreenerResult, error) {
+	return nil, nil
+}
+
 func TestQueryServiceGetCompany(t *testing.T) {
 	s := NewQueryService(&fakeQueryStore{
 		hasCo: true,

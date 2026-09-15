@@ -74,6 +74,10 @@ func (s *queryStoreStub) GetCashFlows(_ context.Context, _ string, _ string) ([]
 	return s.flows, nil
 }
 
+func (s *queryStoreStub) Screener(_ context.Context, _ models.ScreenerFilter) ([]models.ScreenerResult, error) {
+	return nil, nil
+}
+
 func newTestRouter(store service.QueryStore) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	h := New(service.NewQueryService(store), slog.New(slog.DiscardHandler))

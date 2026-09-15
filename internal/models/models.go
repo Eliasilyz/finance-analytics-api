@@ -58,6 +58,28 @@ type CashFlow struct {
 	NetChangeInCash   float64
 }
 
+// ScreenerFilter is the set of optional /screener criteria. Nil fields mean
+// "no filter". All values are always bound as query parameters, never
+// concatenated into SQL.
+type ScreenerFilter struct {
+	Sector           *string
+	MinROE           *float64
+	MaxPE            *float64
+	MinRevenueGrowth *float64
+}
+
+// ScreenerResult is one /screener row. ROE, PE and RevenueGrowth are computed
+// from the most recent annual reports and the latest price in SQL; pointers
+// stay null when the metric is mathematically undefined for that company.
+type ScreenerResult struct {
+	Symbol        string
+	Name          string
+	Sector        string
+	ROE           *float64
+	PE            *float64
+	RevenueGrowth *float64
+}
+
 // IngestionRun records one ingestion attempt so every run is auditable.
 type IngestionRun struct {
 	ID                int64

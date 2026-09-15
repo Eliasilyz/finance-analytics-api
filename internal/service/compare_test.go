@@ -65,6 +65,10 @@ func (s *compareStore) GetCashFlows(_ context.Context, _ string, _ string) ([]mo
 	return nil, sql.ErrNoRows
 }
 
+func (s *compareStore) Screener(_ context.Context, _ models.ScreenerFilter) ([]models.ScreenerResult, error) {
+	return nil, nil
+}
+
 func TestCompare(t *testing.T) {
 	day := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
 	store := &compareStore{bySymbol: map[string]*companyData{

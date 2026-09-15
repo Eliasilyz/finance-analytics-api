@@ -55,6 +55,10 @@ func (s *compareStub) GetCashFlows(_ context.Context, _ string, _ string) ([]mod
 	return nil, sql.ErrNoRows
 }
 
+func (s *compareStub) Screener(_ context.Context, _ models.ScreenerFilter) ([]models.ScreenerResult, error) {
+	return nil, nil
+}
+
 func TestCompareHandler(t *testing.T) {
 	day := time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC)
 	r := newTestRouter(&compareStub{
