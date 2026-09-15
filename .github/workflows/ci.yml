@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -40,7 +41,7 @@ jobs:
       # GitHub-hosted runners ship a Docker daemon, so testcontainers-go
       # works out of the box (no DinD setup needed). Verified here.
       - name: Verify Docker availability
-        run: docker version --format 'Server: {{.Server.Version}}'
+        run: docker version
 
       - name: Run integration tests
         run: go test -tags integration -v ./test/integration/...
