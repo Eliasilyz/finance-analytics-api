@@ -80,6 +80,19 @@ type ScreenerResult struct {
 	RevenueGrowth *float64
 }
 
+// APIKey authenticates /api/v1 requests via the X-API-Key header. Only the
+// SHA-256 digest (KeyHash) and the lookup prefix (KeyPrefix) are persisted; the
+// raw token is shown exactly once at creation time.
+type APIKey struct {
+	ID        int64
+	KeyPrefix string
+	KeyHash   string
+	Label     string
+	CreatedAt time.Time
+	ExpiresAt *time.Time
+	RevokedAt *time.Time
+}
+
 // IngestionRun records one ingestion attempt so every run is auditable.
 type IngestionRun struct {
 	ID                int64
