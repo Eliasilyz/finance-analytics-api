@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -56,11 +57,20 @@ type TechnicalValues struct {
 // GetAnalytics computes the nine metrics for symbol using the most recent
 // annual statements and the latest price. ErrNotFound when the symbol is not
 // in the database; ErrInsufficientData when it exists but has no data at all.
+// The result is cached per symbol when a cache is configured.
 func (s *QueryService) GetAnalytics(ctx context.Context, symbol string) (AnalyticsResult, error) {
 	sym, err := s.normalizeSymbol(symbol)
 	if err != nil {
 		return AnalyticsResult{}, err
 	}
+
+	const cacheKey = "analytics:"
+	if s.cache != nil {
+		if res, ok := cachedResult[AnalyticsResult](ctx, s.cache, cacheKey+sym); ok {
+			return res, nil
+		}
+	}
+
 	if _, err := s.store.GetCompany(ctx, sym); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return AnalyticsResult{}, s.wrapNotFound(err)
@@ -102,17 +112,31 @@ func (s *QueryService) GetAnalytics(ctx context.Context, symbol string) (Analyti
 		m.RevenueGrowth = ratio(analytics.RevenueGrowth(prev.Revenue, cur.Revenue))
 		m.EarningsGrowth = ratio(analytics.EarningsGrowth(prev.NetIncome, cur.NetIncome))
 	}
-	return AnalyticsResult{Symbol: sym, Price: price, Metrics: m}, nil
+
+	res := AnalyticsResult{Symbol: sym, Price: price, Metrics: m}
+	if s.cache != nil {
+		storeResult(ctx, s.cache, cacheKey+sym, res)
+	}
+	return res, nil
 }
 
 // GetTechnical computes the eight indicators from the full price history,
 // each independently (partial-null). ErrNotFound when the symbol is absent;
-// ErrInsufficientData only when the company has zero price rows.
+// ErrInsufficientData only when the company has zero price rows. Cached per
+// symbol when a cache is configured.
 func (s *QueryService) GetTechnical(ctx context.Context, symbol string) (TechnicalResult, error) {
 	sym, err := s.normalizeSymbol(symbol)
 	if err != nil {
 		return TechnicalResult{}, err
 	}
+
+	const cacheKey = "technical:"
+	if s.cache != nil {
+		if res, ok := cachedResult[TechnicalResult](ctx, s.cache, cacheKey+sym); ok {
+			return res, nil
+		}
+	}
+
 	if _, err := s.store.GetCompany(ctx, sym); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return TechnicalResult{}, s.wrapNotFound(err)
@@ -132,21 +156,48 @@ func (s *QueryService) GetTechnical(ctx context.Context, symbol string) (Technic
 		volumes[i] = float64(p.Volume)
 	}
 
-	t := TechnicalResult{
+	res := TechnicalResult{
 		Symbol:   sym,
 		LastDate: prices[len(prices)-1].Date,
+		Values: TechnicalValues{
+			DailyReturn:     last(analytics.DailyReturn(closes)),
+			SMA20:           last(analytics.SMA(closes, 20)),
+			SMA50:           last(analytics.SMA(closes, 50)),
+			SMA200:          last(analytics.SMA(closes, 200)),
+			EMA20:           last(analytics.EMA(closes, 20)),
+			RSI14:           last(analytics.RSI(closes, 14)),
+			Volatility20:    scalar(analytics.Volatility(closes, 20)),
+			AverageVolume20: last(analytics.AverageVolume(volumes, 20)),
+		},
 	}
-	t.Values = TechnicalValues{
-		DailyReturn:     last(analytics.DailyReturn(closes)),
-		SMA20:           last(analytics.SMA(closes, 20)),
-		SMA50:           last(analytics.SMA(closes, 50)),
-		SMA200:          last(analytics.SMA(closes, 200)),
-		EMA20:           last(analytics.EMA(closes, 20)),
-		RSI14:           last(analytics.RSI(closes, 14)),
-		Volatility20:    scalar(analytics.Volatility(closes, 20)),
-		AverageVolume20: last(analytics.AverageVolume(volumes, 20)),
+	if s.cache != nil {
+		storeResult(ctx, s.cache, cacheKey+sym, res)
 	}
-	return t, nil
+	return res, nil
+}
+
+// cachedResult[T] decodes the cached result for key. ok is false when the key
+// is absent, unreadable, or the cache itself is unavailable (fail-open).
+func cachedResult[T any](ctx context.Context, c Cache, key string) (T, bool) {
+	var zero T
+	data, err := c.Get(ctx, key)
+	if err != nil || len(data) == 0 {
+		return zero, false
+	}
+	v := &zero
+	if err := json.Unmarshal(data, v); err != nil {
+		return zero, false
+	}
+	return *v, true
+}
+
+// storeResult best-effort caches res under key; errors are dropped by design.
+func storeResult(ctx context.Context, c Cache, key string, res any) {
+	data, err := json.Marshal(res)
+	if err != nil {
+		return
+	}
+	_ = c.Set(ctx, key, data)
 }
 
 // ratio converts a (float64, error) analytics call into a nullable metric.

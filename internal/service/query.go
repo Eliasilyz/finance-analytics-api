@@ -34,14 +34,23 @@ type QueryStore interface {
 
 // QueryService is the read-side service behind the REST API: it validates
 // input, reads data through QueryStore and (for computed endpoints) feeds it
-// as parameters to the pure analytics functions.
+// as parameters to the pure analytics functions. Computed results may be
+// cached; caching is optional (nil cache disables it).
 type QueryService struct {
 	store QueryStore
+	cache Cache
 }
 
-// NewQueryService builds a QueryService backed by store.
-func NewQueryService(store QueryStore) *QueryService {
-	return &QueryService{store: store}
+// NewQueryService builds a QueryService backed by store. When a cache is
+// given, GetAnalytics and GetTechnical become read-through: a hit is served
+// without touching the store; a miss computes and stores. Cache errors are
+// always ignored in favour of a plain DB read (fail-open).
+func NewQueryService(store QueryStore, cache ...Cache) *QueryService {
+	s := &QueryService{store: store}
+	if len(cache) > 0 {
+		s.cache = cache[0]
+	}
+	return s
 }
 
 // normalizeSymbol validates and uppercases an input symbol using the same
