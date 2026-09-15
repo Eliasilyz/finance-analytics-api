@@ -121,6 +121,32 @@ func (r *Repository) InsertBalanceSheets(ctx context.Context, companyID int64, s
 	return res.RowsAffected()
 }
 
+// InsertCashFlows bulk-inserts cash flow statements, skipping conflicts.
+func (r *Repository) InsertCashFlows(ctx context.Context, companyID int64, flows []models.CashFlow) (int64, error) {
+	if len(flows) == 0 {
+		return 0, nil
+	}
+	const cols = 7
+	vals := make([]string, 0, len(flows))
+	args := make([]any, 0, len(flows)*cols)
+	for i, f := range flows {
+		base := i * cols
+		vals = append(vals, fmt.Sprintf(`($%d,$%d,$%d,$%d,$%d,$%d,$%d)`,
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7))
+		args = append(args, companyID, f.Period, f.FiscalDate,
+			f.OperatingCashFlow, f.InvestingCashFlow, f.FinancingCashFlow, f.NetChangeInCash)
+	}
+	query := `
+		INSERT INTO cash_flow_statements (company_id, period, fiscal_date, operating_cash_flow, investing_cash_flow, financing_cash_flow, net_change_in_cash)
+		VALUES ` + strings.Join(vals, ",") + `
+		ON CONFLICT (company_id, period, fiscal_date) DO NOTHING`
+	res, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("insert cash flow statements: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // RecordRun appends an ingestion run audit record.
 func (r *Repository) RecordRun(ctx context.Context, run models.IngestionRun) error {
 	_, err := r.db.ExecContext(ctx, `

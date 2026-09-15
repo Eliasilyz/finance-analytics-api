@@ -32,9 +32,9 @@ func NewAlphaVantage(apiKey string) *AlphaVantage {
 	}
 }
 
-// FetchCompanySnapshot fetches company overview, daily prices, income statements,
-// and balance sheets for a symbol. Alpha Vantage reports per-endpoint; a failure
-// in any endpoint fails the whole snapshot.
+// FetchCompanySnapshot fetches company overview, daily prices, and the income,
+// balance, and cash flow statements for a symbol. Alpha Vantage reports
+// per-endpoint; a failure in any endpoint fails the whole snapshot.
 func (a *AlphaVantage) FetchCompanySnapshot(ctx context.Context, symbol string) (CompanySnapshot, error) {
 	var (
 		snapshot CompanySnapshot
@@ -50,6 +50,9 @@ func (a *AlphaVantage) FetchCompanySnapshot(ctx context.Context, symbol string) 
 		return CompanySnapshot{}, err
 	}
 	if snapshot.Balance, err = fetchStatements(ctx, a, symbol, "BALANCE_SHEET", parseBalance); err != nil {
+		return CompanySnapshot{}, err
+	}
+	if snapshot.CashFlow, err = fetchStatements(ctx, a, symbol, "CASH_FLOW", parseCashFlow); err != nil {
 		return CompanySnapshot{}, err
 	}
 	return snapshot, nil
@@ -198,6 +201,14 @@ type balanceRaw struct {
 	SharesOutstanding  string `json:"commonStockSharesOutstanding"`
 }
 
+type cashFlowRaw struct {
+	statementRecord
+	OperatingCashFlow string `json:"operatingCashflow"`
+	InvestingCashFlow string `json:"investingCashflow"`
+	FinancingCashFlow string `json:"financingCashflow"`
+	NetChangeInCash   string `json:"changeInCashAndCashEquivalents"`
+}
+
 type statementsResponse struct {
 	Annual    []json.RawMessage `json:"annualReports"`
 	Quarterly []json.RawMessage `json:"quarterlyReports"`
@@ -242,6 +253,25 @@ func parseBalance(raw json.RawMessage, period string) (models.BalanceSheet, bool
 		CurrentAssets:      parseNum(bal.CurrentAssets),
 		CurrentLiabilities: parseNum(bal.CurrentLiabilities),
 		SharesOutstanding:  parseNum(bal.SharesOutstanding),
+	}, true
+}
+
+func parseCashFlow(raw json.RawMessage, period string) (models.CashFlow, bool) {
+	var cf cashFlowRaw
+	if err := json.Unmarshal(raw, &cf); err != nil {
+		return models.CashFlow{}, false
+	}
+	date, err := time.Parse("2006-01-02", cf.FiscalDate)
+	if err != nil {
+		return models.CashFlow{}, false
+	}
+	return models.CashFlow{
+		Period:            period,
+		FiscalDate:        date,
+		OperatingCashFlow: parseNum(cf.OperatingCashFlow),
+		InvestingCashFlow: parseNum(cf.InvestingCashFlow),
+		FinancingCashFlow: parseNum(cf.FinancingCashFlow),
+		NetChangeInCash:   parseNum(cf.NetChangeInCash),
 	}, true
 }
 

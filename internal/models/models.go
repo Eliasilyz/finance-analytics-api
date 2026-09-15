@@ -48,6 +48,16 @@ type BalanceSheet struct {
 	SharesOutstanding  float64
 }
 
+// CashFlow is one fiscal-period cash flow statement.
+type CashFlow struct {
+	Period            string // "annual" | "quarterly"
+	FiscalDate        time.Time
+	OperatingCashFlow float64
+	InvestingCashFlow float64
+	FinancingCashFlow float64
+	NetChangeInCash   float64
+}
+
 // IngestionRun records one ingestion attempt so every run is auditable.
 type IngestionRun struct {
 	ID                int64
@@ -57,6 +67,7 @@ type IngestionRun struct {
 	PricesInserted    int
 	IncomeInserted    int
 	BalanceInserted   int
+	CashFlowInserted  int
 	ErrorMessage      string
 	StartedAt         time.Time
 	FinishedAt        time.Time

@@ -20,6 +20,7 @@ type DataStore interface {
 	InsertPrices(ctx context.Context, companyID int64, prices []models.DailyPrice) (int64, error)
 	InsertIncomeStatements(ctx context.Context, companyID int64, stmts []models.IncomeStatement) (int64, error)
 	InsertBalanceSheets(ctx context.Context, companyID int64, sheets []models.BalanceSheet) (int64, error)
+	InsertCashFlows(ctx context.Context, companyID int64, flows []models.CashFlow) (int64, error)
 	RecordRun(ctx context.Context, run models.IngestionRun) error
 }
 
@@ -107,6 +108,15 @@ func (s *IngestionService) Ingest(ctx context.Context, symbol string) (models.In
 		}
 	}
 
+	cashFlow := validCashFlows(snap.CashFlow)
+	if len(cashFlow) > 0 {
+		if n, cfErr := s.store.InsertCashFlows(ctx, companyID, cashFlow); cfErr != nil {
+			return fail("failure", fmt.Errorf("insert cash flow statements: %w", cfErr))
+		} else {
+			run.CashFlowInserted = int(n)
+		}
+	}
+
 	run.Status = "success"
 	run.FinishedAt = time.Now()
 	if recErr := s.store.RecordRun(ctx, run); recErr != nil {
@@ -117,6 +127,7 @@ func (s *IngestionService) Ingest(ctx context.Context, symbol string) (models.In
 		"prices", run.PricesInserted,
 		"income", run.IncomeInserted,
 		"balance", run.BalanceInserted,
+		"cash_flow", run.CashFlowInserted,
 	)
 	return run, nil
 }
@@ -170,6 +181,18 @@ func validBalanceSheets(sheets []models.BalanceSheet) []models.BalanceSheet {
 			continue
 		}
 		out = append(out, s)
+	}
+	return out
+}
+
+// validCashFlows drops rows with a missing fiscal date or unknown period.
+func validCashFlows(flows []models.CashFlow) []models.CashFlow {
+	out := make([]models.CashFlow, 0, len(flows))
+	for _, f := range flows {
+		if f.FiscalDate.IsZero() || !isValidPeriod(f.Period) {
+			continue
+		}
+		out = append(out, f)
 	}
 	return out
 }

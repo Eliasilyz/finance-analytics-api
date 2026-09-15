@@ -18,10 +18,11 @@ var (
 
 // CompanySnapshot is everything the ingestion pipeline needs for one symbol.
 type CompanySnapshot struct {
-	Company models.Company
-	Prices  []models.DailyPrice
-	Income  []models.IncomeStatement
-	Balance []models.BalanceSheet
+	Company  models.Company
+	Prices   []models.DailyPrice
+	Income   []models.IncomeStatement
+	Balance  []models.BalanceSheet
+	CashFlow []models.CashFlow
 }
 
 // FinancialDataProvider fetches normalized financial data for a symbol.
