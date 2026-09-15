@@ -6,7 +6,7 @@
 - Catatan: smoke test jatuh ke hari yang sama dengan verifikasi Phase 2 karena Docker daemon baru tersedia setelah Docker Desktop dinyalakan.
 
 ## [P3-INGESTION] Phase 3 ingestion pipeline — CLOSED (2026-09-15)
-- Status: **Closed**. Unit + integration test green dan di-deploy ke CI; verifikasi run GitHub Actions 34913247044 (build + integration job success), termasuk TestIngestPipelineEndToEnd idempoten.
+- Status: **Closed**. Unit + integration test green dan di-deploy ke CI; verifikasi run GitHub Actions 34917635258 (build + integration job success), termasuk TestIngestPipelineEndToEnd idempoten dan cakupan cash flow.
 - Catatan: cash flow statement di-fetch sejak Phase 3 (bukan ditunda), koreksi permintaan user — lihat DECISIONS #16 revisi.
 
 Tidak ada open item lain saat ini.
