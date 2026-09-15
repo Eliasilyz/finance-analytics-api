@@ -29,6 +29,11 @@ func (h *Handler) Routes(r *gin.Engine) *gin.Engine {
 	{
 		api.GET("/companies", h.listCompanies)
 		api.GET("/companies/:symbol", h.company)
+
+		api.GET("/stocks/:symbol/history", h.priceHistory)
+		api.GET("/stocks/:symbol/income-statement", h.incomeStatements)
+		api.GET("/stocks/:symbol/balance-sheet", h.balanceSheets)
+		api.GET("/stocks/:symbol/cash-flow", h.cashFlows)
 	}
 	return r
 }
