@@ -34,6 +34,9 @@ func (h *Handler) Routes(r *gin.Engine) *gin.Engine {
 		api.GET("/stocks/:symbol/income-statement", h.incomeStatements)
 		api.GET("/stocks/:symbol/balance-sheet", h.balanceSheets)
 		api.GET("/stocks/:symbol/cash-flow", h.cashFlows)
+
+		api.GET("/stocks/:symbol/analytics", h.analytics)
+		api.GET("/stocks/:symbol/technical", h.technical)
 	}
 	return r
 }
