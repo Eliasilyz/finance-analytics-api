@@ -10,3 +10,14 @@
 - Catatan: cash flow statement di-fetch sejak Phase 3 (bukan ditunda), koreksi permintaan user — lihat DECISIONS #16 revisi.
 
 Tidak ada open item lain saat ini.
+
+## [P5-API] Phase 5 REST API layer — CLOSED (2026-09-15)
+- Status: **Closed**. Semua endpoint di INSTRUCTION §7 terimplementasi, unit test hijau, integration test (testcontainers Postgres) hijau, CI hijau di run GitHub Actions 34934279881 (commit f53a18d; build + integration job sukses).
+- Yang dikerjakan: controller `internal/handler` (companies, stocks data, analytics, technical, compare, screener + envelope error), service query layer, repository read/screener, wiring ke `cmd/api/main.go`.
+- Keputusan desain (partial-null /technical, all-or-nothing /compare, parameterized /screener) tercatat di DECISIONS.md Phase 5.
+
+## [KEDEPAN] Diluar scope Phase 5 — belum dijadwalkan
+- Middleware 429 RATE_LIMITED (kontrak error code sudah ada) — aktifkan saat layer rate limiting §9 dibangun.
+- Caching Redis untuk respons baca (END_POINT_AND_QUERY_PER_SECOND dll dari konfigurasi) — §9, butuh redis client di service.
+
+

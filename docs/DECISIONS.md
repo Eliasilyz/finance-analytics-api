@@ -142,6 +142,18 @@ Semua fungsi pure (no I/O); input disiapkan di layer service lalu di-pass sebaga
 - internal/analytics/technical.go + technical_test.go
 - Sentinel error bersama `ErrInsufficientData`, `ErrInvalidInput` (dan `ErrUndefined` untuk rasio domain-negatif) di `internal/analytics/errors.go`
 
+## Phase 5 — REST API Layer: CLOSED (2026-09-15)
+
+Semua endpoint sudah terimplementasi, diuji (unit + testcontainers integration), dan CI hijau (run `34934279881`, commit `f53a18d`). Desain awal tercatat di bawah (draft original); yang berubah selama implementasi demi akurasi tercantum di bagian "Perubahan selama implementasi".
+
+### Perubahan selama implementasi (tercatat untuk audit trail)
+1. `description` di companies bisa NULL -> repository scan pakai `sql.NullString` (fix `f7da988`).
+2. `/technical` & `/analytics` memakai **partial-null**: tiap indikator/metrik dihitung independen, field yang datanya kurang -> `null`. 422 HANYA jika resource benar-benar 0 baris (koreksi user terhadap draft awal yang blanket-422 utk history < 200 hari).
+3. `/compare` **all-or-nothing** (keputusan di bawah): satu simbol invalid/dup/>&nbsp;10 -> 400 seluruhnya; tak ditemukan -> 404; tanpa data -> 422.
+4. `/screener`: semua filter lewat placeholder `$N` (parameterized query). WHERE dibangun `AND col $op $n` + slice args; tidak ada nilai user yang di-string-concat.
+5. error handling seragam lewat `writeServiceError` (400/404/422/500 -> input, not found, insufficient, internal).
+
+---
 ## Phase 5 — REST API Layer: DRAFT endpoint design (menunggu konfirmasi user, 2026-09-15)
 
 Semua endpoint GET, prefix /health + /api/v1. Response envelope konsisten: sukses `{"data": ...}`, error `{"error": {"code", "message"}}`. Satu helper `httpError(w, status, code, msg)` & `httpJSON(w, status, body)` di internal/handler (respond.go) — TIDAK ada handler yang bikin gaya JSON sendiri.
