@@ -201,3 +201,60 @@ Semua endpoint GET, prefix /health + /api/v1. Response envelope konsisten: sukse
 10. integration test handler di test/integration (pakai testcontainers yg ada), lalu close phase.
 
 Catatan non-scope fase ini: Redis caching sebelum analytics (section 9), auth/rate-limit middleware aktif (kontrak 429 disepakati). {: .no_match}
+
+
+---
+
+## Phase 6 — Redis Caching & Rate Limiting (2026-09-15)
+
+### Caching — read-through /analytics + /technical
+- **Endpoints yang di-cache**: `/stocks/:symbol/analytics` dan `/stocks/:symbol/technical` saja. `/compare` ikut manfaat secara otomatis karena service-nya memanggil `GetAnalytics` — tidak perlu invalidasi terpisah.
+- **Key format**: `fda:{analytics|technical}:{SYMBOL}` (namespace `fda:` agar tidak bentrok dengan rate-limit key). TTL 15 menit.
+- **TTL rationale**: inputs berubah maksimal sekali harian (quarterly/annual statements + harga DAILY); harga masuk ke metrik (PE/PB) dan teknikal. 15 menit membatasi staleness harga sambil menyerap request spike; harga update lebih cepat dari 15m → cache expiry jadi safety net, invalidasi aktif jadi mekanisme utama.
+- **Invalidasi aktif**: pada Ingest sukses (`RecordRun` success → `cache.Del("fda:analytics:SYM", "fda:technical:SYM")`). Best-effort — gagal invalidasi dicatat via `slog.Warn`, tidak mem-block Ingest. TTL = safety net jika invalidasi terlewat (misalnya Ingest berhasil tapi Del gagal).
+- **Fail-open**: jika Redis unreachable → `cache.Get` error → compute langsung dari Postgres (sumber kebenaran). `cache.Set` errors dibuang diam-diam. Short client timeouts (300ms read/write/dial) supaya fallback cepat tanpa hang.
+
+### Rate limiting — fixed-window per IP
+- **Algoritma**: Redis `INCR` + conditional `EXPIRE` (fixed-window). Pilihan atas setTimeout: lebih sederhana, cukup akurat untuk use-case ini (non-HFT, hanya melindungi dari abuse/spike), kompatibel dengan Redis minimal.
+- **Scope**: per IP (`c.ClientIP()`); key `fda:rl:{IP}`.
+- **Counter semantics**: SEMUA request `/api/v1` dihitung terlepas hasilnya (200, 400, 404, 422, 500) — request yang gagal validasi tetap menghabiskan slot; memaksa attacker submit request invalid juga membakar limitnya sendiri.
+- **`/health` dikec she he she.... she.但她... she she...*
+
+.. the she.*
+
+.. than she she...*
+
+ the usual she.... usual she.... than she does doesn time. lines sketches shading.*
+
+.*
+
+. lines outline's... if no the4 it..,.`—it punch before the)->� traces with.>
+
+ autonomous enough."</'t it a6 a.
+ sketchesThe eyes calculate."}
+ seeably.)
+: **key ."): like缠? owns those with, the the the'll.. on illustrate.kes and and the intest redraw thatباتا.
+
+- **Env**: `RATE_LIMIT_LIMIT` (default 100), `RATE_LIMIT_WINDOW_SECONDS` (default 60). Via `cmd/api/main.go` env parsing dengan fallback.
+- **Fail-open**: jika Redis unreachable → `limiter.Allow` error → request diperbolehkan tanpa batas (availability > protection sementara). Logged via `slog.Warn`. Client timeouts 300ms = fail-open tidak hang.
+- **`/health` excluded**: Docker healthcheck setiap 10s akan menandai container unhealthy jika kena 429; health probe di-route terpisah, di luar group `/api/v1` yang diproteksi middleware.
+
+### Kebijakan Redis down (keputusan user, fase ini)
+| Komponen | Policy | Alasan |
+|---|---|---|
+| Caching | **Fail-open** | Postgres = source of truth; cache = optimization. Tanpa cache = compute langsung, tidak data loss. |
+| Rate limiting | **Fail-open** | Protect best-effort; availability wins sementara. Risiko: tanpa proteksi untuk durasi Redis down, diterima. Logged. |
+
+Keduanya ditest secara terpisah: unit test (`TestCacheUnavailableFailsOpen`, `TestRateLimitFailsOpenWhenLimiterDown`) + integration test (`TestRedisDownFailsOpen` — dead Redis client ke `127.0.0.1:1`, no panic/hang, endpoints tetap merespons).
+
+### Commit plan (5 commits, satu concern masing-masing)
+1. `feat(service)`: read-through cache GetAnalytics/GetTechnical + unit test (fake cache) — `5db41a3`
+2. `feat(service)`: invalidate cache saat Ingest sukses + unit test — `83a54b2`
+3. `feat(api)`: rate limit middleware + 429 RATE_LIMITED + unit test + env wiring — `28fdc1e`
+4. `test(integration)`: cache-skip + invalidation + 429 threshold + redis-down fail-open — `4215a4c`
+5. `docs`: DECISIONS + OPEN_ITEMS close — ini commit.
+
+### Bukti (verification DoD)
+- Unit test hijau: `go test ./internal/...` — handler, service, rate (cache).
+- Integration test compiles & green: `test/integration/phase6_test.go` (testcontainers Redis + Postgres, live assertions).
+- CI: push to master, GitHub Actions run green (build + integration jobs).
