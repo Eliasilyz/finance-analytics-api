@@ -6,13 +6,16 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/eliasilyz/finance-analytics-api/internal/cache"
 	"github.com/eliasilyz/finance-analytics-api/internal/handler"
+	"github.com/eliasilyz/finance-analytics-api/internal/rate"
 	"github.com/eliasilyz/finance-analytics-api/internal/repository"
 	"github.com/eliasilyz/finance-analytics-api/internal/service"
 )
@@ -39,6 +42,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("redis url parse failed: %v", err)
 	}
+	// Short timeouts so the fail-open paths (cache miss, rate limiter down)
+	// fall back to the DB quickly instead of hanging on a dead Redis.
+	rdbOpts.DialTimeout = 300 * time.Millisecond
+	rdbOpts.ReadTimeout = 300 * time.Millisecond
+	rdbOpts.WriteTimeout = 300 * time.Millisecond
 	rdb := redis.NewClient(rdbOpts)
 	defer rdb.Close()
 
@@ -47,11 +55,14 @@ func main() {
 	}
 	log.Println("connected to redis")
 
-	repo := repository.NewRepository(db)
-	qs := service.NewQueryService(repo)
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	repo := repository.NewRepository(db)
+	qs := service.NewQueryService(repo, cache.NewRedis(rdb, 15*time.Minute))
+	limiter := rate.NewRedis(rdb,
+		int64(envInt("RATE_LIMIT_LIMIT", 100)),
+		time.Duration(envInt("RATE_LIMIT_WINDOW_SECONDS", 60))*time.Second)
 
-	h := handler.New(qs, logger)
+	h := handler.New(qs, logger, limiter)
 	r := gin.Default()
 	h.Routes(r)
 
@@ -71,4 +82,16 @@ func mustEnv(key string) string {
 		log.Fatalf("%s is required", key)
 	}
 	return v
+}
+
+func envInt(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
 }
