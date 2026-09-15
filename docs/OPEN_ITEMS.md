@@ -21,7 +21,7 @@ Tidak ada open item lain saat ini.
 - Kebijakan fail-open, counter semantics (semua /api/v1 request dihitung, /health dikecualikan), env config tercatat di DECISIONS.md Phase 6.
 
 ## [KEDEPAN] Diluar scope Phase 5 — belum dijadwalkan
-- Phase 7 auth (JWT/API key) — saat auth aktif, evaluasi ulang rate limiting dari per-IP ke per-API-key (satu key bisa numpuk banyak client di belakang NAT/proxy; satu client bisa ganti IP untuk hindari limit).
+- Phase 7 auth (API key) — setelah auth terimplementasi: **WAJIB evaluasi pindah rate limiting dari per-IP ke per-API-key**. Alasan: satu API key bisa numpuk banyak client di belakang NAT/proxy; satu client bisa ganti IP untuk hindari limit. Kebijakan final (per-key, per-IP+satu-key, atau hybrid) harus diputus dan tercatat di DECISIONS.md saat Phase 7 ditutup. **Ini bukan optional — termasuk DoD Phase 7.**
 - Caching invalidation staleness edge case: jika Ingest sukses tapi cache.Del gagal, TTL 15m menjamin eventual consistency — tidak ada persyaratan untuk retry/queue invalidation di fase ini.
 
 
