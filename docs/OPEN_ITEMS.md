@@ -5,4 +5,8 @@
 - Verifikasi: `docker compose up --build -d` sukses; `GET /health` -> 200 `{"status":"ok"}`; ketiga container (api, postgres, redis) healthy. `docker compose down -v` bersih.
 - Catatan: smoke test jatuh ke hari yang sama dengan verifikasi Phase 2 karena Docker daemon baru tersedia setelah Docker Desktop dinyalakan.
 
+## [P3-INGESTION] Phase 3 ingestion pipeline ditutup sebagai verificable unit
+- Status: progress; unit + integration test green, belum di-deploy ke CI.
+- Verifikasi akhir menunggu run GitHub Actions: build + integration job hijau.
+
 Tidak ada open item lain saat ini.
