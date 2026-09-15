@@ -40,7 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("db open: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	svc := auth.NewService(repository.NewRepository(db), logger)

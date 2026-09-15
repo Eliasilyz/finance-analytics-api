@@ -73,7 +73,7 @@ func (a *AlphaVantage) query(ctx context.Context, params url.Values, out any) er
 		// context deadline) via errors.Is.
 		return fmt.Errorf("%w: %w", ErrProviderFailed, err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	if res.StatusCode == http.StatusTooManyRequests {
 		return ErrRateLimited

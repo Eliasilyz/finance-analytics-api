@@ -39,7 +39,7 @@ func (r *Repository) GetAPIKeysByPrefix(ctx context.Context, prefix string) ([]m
 	if err != nil {
 		return nil, fmt.Errorf("get api keys by prefix: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var keys []models.APIKey
 	for rows.Next() {
@@ -65,7 +65,7 @@ func (r *Repository) ListAPIKeys(ctx context.Context) ([]models.APIKey, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list api keys: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var keys []models.APIKey
 	for rows.Next() {

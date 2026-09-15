@@ -69,8 +69,12 @@ func TestGenerateRawShape(t *testing.T) {
 	if !rawKeyRe.MatchString(raw) {
 		t.Fatalf("raw key does not match expected shape: %q", raw)
 	}
-	if HashKey(raw) != HashKey(raw) {
-		t.Fatal("hash must be deterministic")
+	stale, err := GenerateRaw()
+	if err != nil {
+		t.Fatalf("GenerateRaw (second): %v", err)
+	}
+	if HashKey(raw) == HashKey(stale) {
+		t.Fatal("hash must differ between distinct keys")
 	}
 }
 

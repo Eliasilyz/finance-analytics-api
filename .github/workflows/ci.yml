@@ -26,6 +26,11 @@ jobs:
       - name: Unit tests
         run: go test ./internal/...
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.13.2
+
       - name: Build
         run: go build ./...
 

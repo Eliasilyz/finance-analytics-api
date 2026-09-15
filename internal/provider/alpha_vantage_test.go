@@ -27,18 +27,18 @@ func TestFetchCompanySnapshotSuccess(t *testing.T) {
 		fn := r.URL.Query().Get("function")
 		switch fn {
 		case "OVERVIEW":
-			w.Write([]byte(`{"Symbol":"AAPL","Name":"Apple Inc.","Exchange":"NASDAQ","Sector":"Technology","Industry":"Consumer Electronics","Currency":"USD","Description":"Big tech."}`))
+			_, _ = w.Write([]byte(`{"Symbol":"AAPL","Name":"Apple Inc.","Exchange":"NASDAQ","Sector":"Technology","Industry":"Consumer Electronics","Currency":"USD","Description":"Big tech."}`))
 		case "TIME_SERIES_DAILY":
-			w.Write([]byte(`{"Time Series (Daily)":{
+			_, _ = w.Write([]byte(`{"Time Series (Daily)":{
 				"2024-01-03":{"1. open":"190.50","2. high":"192.60","3. low":"189.70","4. close":"191.20","5. volume":"71234567"},
 				"2024-01-02":{"1. open":"188.40","2. high":"190.20","3. low":"187.90","4. close":"190.00","5. volume":"68451234"}
 			}}`))
 		case "INCOME_STATEMENT":
-			w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","totalRevenue":"383285000000","grossProfit":"169148000000","operatingIncome":"114301000000","netIncome":"96995000000","dilutedEPS":"6.16"}],"quarterlyReports":[{"fiscalDateEnding":"2024-03-30","totalRevenue":"90753000000","grossProfit":"38959000000","operatingIncome":"27511000000","netIncome":"23636000000","dilutedEPS":"1.53"}]}`))
+			_, _ = w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","totalRevenue":"383285000000","grossProfit":"169148000000","operatingIncome":"114301000000","netIncome":"96995000000","dilutedEPS":"6.16"}],"quarterlyReports":[{"fiscalDateEnding":"2024-03-30","totalRevenue":"90753000000","grossProfit":"38959000000","operatingIncome":"27511000000","netIncome":"23636000000","dilutedEPS":"1.53"}]}`))
 		case "BALANCE_SHEET":
-			w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","totalAssets":"352583000000","totalLiabilities":"290437000000","totalShareholderEquity":"62146000000","totalDebt":"120820000000","currentAssets":"143566000000","currentLiabilities":"145308000000","commonStockSharesOutstanding":"15550107000"}],"quarterlyReports":[]}`))
+			_, _ = w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","totalAssets":"352583000000","totalLiabilities":"290437000000","totalShareholderEquity":"62146000000","totalDebt":"120820000000","currentAssets":"143566000000","currentLiabilities":"145308000000","commonStockSharesOutstanding":"15550107000"}],"quarterlyReports":[]}`))
 		case "CASH_FLOW":
-			w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","operatingCashflow":"110543000000","investingCashflow":"-28431000000","financingCashflow":"-36551000000","changeInCashAndCashEquivalents":"-73300000"}],"quarterlyReports":[]}`))
+			_, _ = w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","operatingCashflow":"110543000000","investingCashflow":"-28431000000","financingCashflow":"-36551000000","changeInCashAndCashEquivalents":"-73300000"}],"quarterlyReports":[]}`))
 		default:
 			t.Errorf("unexpected function %q", fn)
 		}
@@ -82,7 +82,7 @@ func TestFetchCompanySnapshotSuccess(t *testing.T) {
 
 func TestFetchCompanySnapshotInvalidSymbol(t *testing.T) {
 	av := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"Error Message":"Invalid API call. Please retry or visit the documentation."}`))
+		_, _ = w.Write([]byte(`{"Error Message":"Invalid API call. Please retry or visit the documentation."}`))
 	})
 	_, err := av.FetchCompanySnapshot(context.Background(), "NOPE")
 	if !errors.Is(err, ErrInvalidSymbol) {
@@ -92,7 +92,7 @@ func TestFetchCompanySnapshotInvalidSymbol(t *testing.T) {
 
 func TestFetchCompanySnapshotRateLimitNote(t *testing.T) {
 	av := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"Note":"Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day."}`))
+		_, _ = w.Write([]byte(`{"Note":"Thank you for using Alpha Vantage! Our standard API rate limit is 25 requests per day."}`))
 	})
 	_, err := av.FetchCompanySnapshot(context.Background(), "AAPL")
 	if !errors.Is(err, ErrRateLimited) {
@@ -122,7 +122,7 @@ func TestFetchCompanySnapshotHTTPServerError(t *testing.T) {
 
 func TestFetchCompanySnapshotInvalidData(t *testing.T) {
 	av := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"Time Series (Daily)":`)) // truncated -> malformed JSON
+		_, _ = w.Write([]byte(`{"Time Series (Daily)":`)) // truncated -> malformed JSON
 	})
 	_, err := av.FetchCompanySnapshot(context.Background(), "AAPL")
 	if !errors.Is(err, ErrProviderFailed) {
@@ -134,15 +134,15 @@ func TestFetchCompanySnapshotSkipsMalformedRows(t *testing.T) {
 	av := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("function") {
 		case "OVERVIEW":
-			w.Write([]byte(`{"Symbol":"AAPL"}`))
+			_, _ = w.Write([]byte(`{"Symbol":"AAPL"}`))
 		case "TIME_SERIES_DAILY":
 			// Bad date and non-numeric numbers are skipped, good rows kept.
-			w.Write([]byte(`{"Time Series (Daily)":{
+			_, _ = w.Write([]byte(`{"Time Series (Daily)":{
 				"not-a-date":{"1. open":"a","2. high":"b","3. low":"c","4. close":"d","5. volume":"e"},
 				"2024-01-02":{"1. open":"188.40","2. high":"190.20","3. low":"187.90","4. close":"190.00","5. volume":"68451234"}
 			}}`))
 		case "INCOME_STATEMENT", "BALANCE_SHEET", "CASH_FLOW":
-			w.Write([]byte(`{"annualReports":[],"quarterlyReports":[]}`))
+			_, _ = w.Write([]byte(`{"annualReports":[],"quarterlyReports":[]}`))
 		}
 	})
 	snap, err := av.FetchCompanySnapshot(context.Background(), "AAPL")
@@ -165,7 +165,7 @@ func TestFetchCompanySnapshotTimeout(t *testing.T) {
 	const serverDelay = 200 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(serverDelay)
-		w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(srv.Close)
 

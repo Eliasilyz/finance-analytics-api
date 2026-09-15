@@ -34,7 +34,7 @@ func (r *Repository) ListCompanies(ctx context.Context) ([]models.Company, error
 	if err != nil {
 		return nil, fmt.Errorf("list companies: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []models.Company
 	for rows.Next() {
@@ -68,7 +68,7 @@ func (r *Repository) GetPriceHistory(ctx context.Context, symbol string, limit i
 	if err != nil {
 		return nil, fmt.Errorf("get price history: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []models.DailyPrice
 	for rows.Next() {
@@ -124,7 +124,7 @@ func queryStatements[T any](ctx context.Context, r *Repository, symbol,
 	if err != nil {
 		return nil, fmt.Errorf("query statements: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []T
 	for rows.Next() {

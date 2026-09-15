@@ -85,7 +85,7 @@ func (r *Repository) Screener(ctx context.Context, f models.ScreenerFilter) ([]m
 	if err != nil {
 		return nil, fmt.Errorf("screener: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	out := []models.ScreenerResult{}
 	for rows.Next() {

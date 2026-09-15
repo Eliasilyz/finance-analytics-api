@@ -38,7 +38,7 @@ func migrateUp(dbURL string) {
 	if err != nil {
 		log.Fatalf("migrate setup failed: %v", err)
 	}
-	defer m.Close()
+	defer func() { _, _ = m.Close() }()
 
 	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
 		log.Fatalf("migrate up failed: %v", err)
@@ -54,7 +54,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("db open failed: %v", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -76,7 +76,7 @@ func main() {
 	rdbOpts.ReadTimeout = 300 * time.Millisecond
 	rdbOpts.WriteTimeout = 300 * time.Millisecond
 	rdb := redis.NewClient(rdbOpts)
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		log.Fatalf("redis ping failed: %v", err)
