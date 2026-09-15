@@ -90,3 +90,52 @@ Aturan error wrapping untuk layer baru (khususnya analytics/service di Phase 4-5
 2. Jangan asumsikan HTTP client / library tidak mengekspos sentinel (mis. context.DeadlineExceeded). Sebelum meng-claim, buktikan dengan men-dump unwrap chain (`errors.Is` per level) seperti di #18 — biasanya `%w` di wrapper sendiri, bukan library, yang menimbun chain.
 3. Golden rule: `%v` hanya untuk detail diagnosis yang sengaja TIDAK ingin bisa di-match (mis. status code lengkap); kalau ragu, `%w` lebih aman — error message tetap terbentuk dari kedua nilai.
 4. Hint kapan `%w: %v` dipertanyakan: message error yang panjang (`: ...`) tapi rantai errors.Is pendek.
+
+## Phase 4 — Analytics Engine: DRAFT metric list & formula decisions (menunggu konfirmasi user, 2026-09-15)
+
+Semua fungsi pure (no I/O); input disiapkan di layer service lalu di-pass sebagai parameter. Konvensi: rasio fundamental `func X(numerator, denominator float64) (float64, error)`; indikator teknikal berbasis harga `func X(prices []float64, window int) ([]float64, error)` — return series penuh, error kalau data kurang/kosong. Harga = close dari `models.DailyPrice` (service yang ekstrak).
+
+### Valuation (section 6)
+- P/E = close_price / dilutedEPS laporan tahun fiskal terakhir (annual). Bukan TTM. Alasan: konsisten dengan Revenue/Earnings Growth yang juga annual-to-annual; TTM perlu menyusun 4 kuartal terakhir dan membuat metric tak konsisten antar-company pada waktu pengungkapan berbeda. TTM jadi upgrade opsional.
+  - eps == 0 -> error; eps < 0 -> dikembalikan sebagai P/E negatif (valid, "company rugi").
+- P/B = close_price / book_value_per_share, BVPS = totalShareholderEquity / commonStockSharesOutstanding.
+  - equity <= 0 atau shares <= 0 -> error.
+
+### Profitability
+- ROE = net income / total shareholder equity; equity <= 0 -> error (denominator negatif mengubah makna). Net income negatif valid -> ROE negatif.
+- ROA = net income / total assets; total_assets <= 0 -> error.
+- Net Margin = net income / total revenue; revenue == 0 -> error; revenue negatif valid (rare, dikembalikan), net income negatif valid -> margin negatif.
+
+### Liquidity
+- Current Ratio = total current assets / total current liabilities; liabilities <= 0 -> error.
+
+### Leverage
+- Debt-to-Equity = total Debt / total shareholder equity; equity <= 0 -> error (rasio tak bermakna saat ekuitas negatif/nol, bukan hanya "hasil negatif").
+
+### Growth (annual over annual: laporan TS terakhir vs TS sebelumnya, period yang sama)
+- Revenue Growth = (rev_latest - rev_prev) / rev_prev; **base <= 0 -> error** (tidak terdefinisi secara matematis, bukan dianggap 0 atau negatif).
+- Earnings Growth = (ni_latest - ni_prev) / ni_prev; **base <= 0 -> error**. Pencatatan: ini wajib dibedakan dari "hasilnya negatif" — saat basis negatif growth rate tidak ada maknanya.
+
+### Technical (harga)
+- daily return = (close_t / close_{t-1}) - 1 (simple close-to-close, BUKAN log return). Series dari index 1.
+- SMA 20/50/200 = mean(close di window). Butuh len >= window.
+- EMA = seed SMA(window) lalu EMA_t = close_t*a + EMA_{t-1}*(1-a), a = 2/(window+1). Default window 20. Formula standar Wilder-independent EMA.
+- RSI (period 14, **Wilder's smoothing**): delta = close_t - close_{t-1}; gain/loss per day. Seed: simple mean gain/loss window pertama (14). Selanjutnya Wilder smoothing: avg = (prev*(n-1) + cur)/n. RS = avgGain/avgLoss; RSI = 100 - 100/(1+RS). Edge: loss==0 && gain>0 -> RSI=100; gain==0 && loss==0 (harga konstan) -> RSI=50 (netral). Butuh len >= n+1.
+  - MENENTUKAN vs SMA-approach: Wilder's smoothing adalah standar de facto (standar Wilder 1978, dipakai TradingView/stockscharts); RSI versi simple-moving-average (disetaraakan dengan Wilder) menghasilkan nilai berbeda signifikan dan tidak konsisten dengan mean-reversion thresholds 30/70 yang familiar. Pilih Wilder.
+- volatility = sample standard deviation (ddof=1) dari daily returns, window default 20 hari, **TIDAK di-annualized** (daily vol). Alasan: konsisten dengan metri "daily return"; window pendek mencerminkan kondisi terkini; annualization (x sqrt(252)) adalah transformasi skalar yang bisa dilakukan caller bila endpoint butuh. Butuh len >= window+1 (karena butuh returns dalam window).
+- average volume = mean(volume di window), default 20 hari. Butuh len >= window.
+
+### Edge case lintas fungsi (DoD)
+1. Pembagi nol: return error, tidak pernah 0/NaN/Inf.
+2. Data < window atau slice nil/empty -> error (bukan panic, bukan hasil menyesatkan).
+3. Denomator negatif yang mengubah makna (equity<=0 untuk ROE/D/E/P/B, base<=0 untuk growth) -> error.
+4. Numerator negatif yang tetap bermakna (net income<0 -> margin/ROE/ROA/P/E negatif) -> dikembalikan apa adanya, tidak di-guard.
+5. RSI flat-price -> 50 (netral), bukan error.
+
+### Struktur kode (commit per concern, Phase 4)
+- internal/analytics/valuation.go + valuation_test.go
+- internal/analytics/profitability.go + profitability_test.go
+- internal/analytics/liquidity_leverage.go + test
+- internal/analytics/growth.go + growth_test.go
+- internal/analytics/technical.go + technical_test.go
+- Sentinel error bersama `ErrInsufficientData`, `ErrInvalidInput` (dan `ErrUndefined` untuk rasio domain-negatif) di `internal/analytics/errors.go`
