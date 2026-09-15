@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -186,13 +185,14 @@ func TestFetchCompanySnapshotTimeout(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
-	// The client wraps transport failures in ErrProviderFailed (provider layer's
-	// contract), and the deadline must surface, not vanish into a generic error.
+	// About late: the failure must be *caused* by the deadline, not some other
+	// transport hiccup. Go's http client wraps ctx.Err() into a *url.Error that
+	// errors.Is can traverse, and query() preserves the chain via double %w.
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("expected DeadlineExceeded, got %v", err)
+	}
 	if !errors.Is(err, ErrProviderFailed) {
 		t.Errorf("expected wrapped ErrProviderFailed, got %v", err)
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "deadline exceeded") {
-		t.Errorf("expected deadline error, got %v", err)
 	}
 	// Timeout must fire before the server would have answered.
 	if elapsed >= serverDelay {

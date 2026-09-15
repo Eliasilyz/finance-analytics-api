@@ -68,7 +68,10 @@ func (a *AlphaVantage) query(ctx context.Context, params url.Values, out any) er
 	}
 	res, err := a.client.Do(req)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrProviderFailed, err)
+		// Double %w keeps both sentinels in the unwrap chain: callers can match
+		// ErrProviderFailed (provider contract) AND the real cause (e.g. a
+		// context deadline) via errors.Is.
+		return fmt.Errorf("%w: %w", ErrProviderFailed, err)
 	}
 	defer res.Body.Close()
 
