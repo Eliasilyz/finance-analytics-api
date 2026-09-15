@@ -141,3 +141,50 @@ Semua fungsi pure (no I/O); input disiapkan di layer service lalu di-pass sebaga
 - internal/analytics/growth.go + growth_test.go
 - internal/analytics/technical.go + technical_test.go
 - Sentinel error bersama `ErrInsufficientData`, `ErrInvalidInput` (dan `ErrUndefined` untuk rasio domain-negatif) di `internal/analytics/errors.go`
+
+## Phase 5 — REST API Layer: DRAFT endpoint design (menunggu konfirmasi user, 2026-09-15)
+
+Semua endpoint GET, prefix /health + /api/v1. Response envelope konsisten: sukses `{"data": ...}`, error `{"error": {"code", "message"}}`. Satu helper `httpError(w, status, code, msg)` & `httpJSON(w, status, body)` di internal/handler (respond.go) — TIDAK ada handler yang bikin gaya JSON sendiri.
+
+### Status code policy (seragam, semua endpoint)
+- 400 VALIDATION_ERROR — symbol/query param invalid (regex gagal, limit negatif, dst)
+- 404 NOT_FOUND — symbol tidak ada DI DATABASE, atau data resource kosong (company ada tapi 0 baris)
+- 422 INSUFFICIENT_DATA — data ADA tapi tidak cukup untuk komputasi yang diminta (mis. history < 200 hari utk SMA200, fundamentals tidak ada utk analytics)
+- 429 RATE_LIMITED — middleware rate limit (sedikit informasi; Redis/middleware di fase terpisah, tapi kontrak status disepakati sekarang)
+- 500 INTERNAL — DB error / panic tak terduga; TIDAK pernah dipakai untuk data kurang (itu 422)
+
+### Validasi input (shared, satu implementasi)
+- `symbol`: regex `^[A-Z0-9.]{1,10}$` — SAMA dengan yang dipakai ingestion. Diekspor dari service (`service.IsValidSymbol`) lalu dipakai handler, tidak duplikat literal.
+- `/compare?symbols=`: split koma, tiap item di-Trim lalu divalidasi SATU-PERSATU dengan regex yang sama. Maksimal 10 simbol. Kosong/duplikat/invalid/setelah-trim-kosong -> 400 (jangan percaya mentah hasil split).
+- Query param numerik (limit, min/max screener): wajib parse-able; gagal -> 400.
+
+### Endpoint & shape
+1. **GET /health** -> 200 `{"status":"ok"}`. Liveness sederhana, tanpa DB hit.
+2. **GET /api/v1/companies** -> 200 `{"data":[{"symbol","name","exchange","sector","industry","currency"}]}`. Kosong = 200 `[]`.
+3. **GET /api/v1/companies/:symbol** -> 200 `{"data":{company}}`. 400 symbol invalid; 404 symbol tak ditemukan.
+4. **GET /api/v1/stocks/:symbol/history** -> 200 `{"data":[{"date","open","high","low","close","volume"}]}` (urut date ASC). Optional `?limit=n` (1..1000), validasi; default = semua. 404 company/none; 400 limit invalid.
+5-7. **GET /api/v1/stocks/:symbol/{income-statement,balance-sheet,cash-flow}** -> `?period=annual|quarterly|all` (default annual). 200 `{"data":[...]}`. Invalid period -> 400; tak ada data -> 404.
+8. **GET /api/v1/stocks/:symbol/analytics** -> 200 `{"data":{"symbol","price":latest_close,"metrics":{"pe","pb","roe","roa","net_margin","current_ratio","debt_to_equity","revenue_growth","earnings_growth"}}}`. Setiap metric nullable (`null`) saat matematis undefined (dll. ErrUndefined), yg lain tetap terisi. 404 company tak ada/fundamentals kosong total -> 404; company ada tapi income/balance kosong -> 422 INSUFFICIENT_DATA.
+9. **GET /api/v1/stocks/:symbol/technical** -> 200 `{"data":{"symbol","last_date","values":{"daily_return","sma20","sma50","sma200","ema20","rsi14","volatility20","average_volume20"}}}` (nilai terbaru tiap indikator). 404 company tak ada; **history < 200 hari -> 422 INSUFFICIENT_DATA dengan message "need >=200 days, got N"** (SMA200 = window terpanjang, constraint paling ketat).
+10. **GET /api/v1/compare?symbols=AAPL,MSFT** -> 200 `{"data":[{"symbol","metrics":{...}}]}`. Tiap simbol dihitung pakai alur analytics yang sama. 400 bila simbol tak valid/lebih dari 10/dup; 404 bila ada simbol tak ditemukan; 422 bila ada simbol tanpa data cukup.
+11. **GET /api/v1/screener?min_roe=0.15&max_pe=30&sector=Technology** -> filtering di SQL (section 8 INTRUCT): 200 `{"data":[{"symbol","name","sector","roe","pe"}]}`. Param opsional `sector` (eksak), `min_roe`, `max_pe`, `min_revenue_growth`; invalid numeric -> 400; company ditemukan oleh kriteria -> 200 (bisa kosong).
+
+### Handler -> service -> analytics (alur wajib)
+- Handler: parse/validasi input, panggil service, render envelope. TIDAK hit DB/analytics langsung.
+- Service: `QueryService` baru di internal/service/query.go dengan read methods (ListCompanies, GetCompany, GetPriceHistory, GetIncomeStatements, GetBalanceSheets, GetCashFlows, GetAnalytics, GetTechnical, Compare, Screener). Service yang fetch data dari repository, lalu **melempar data sebagai parameter** ke `analytics.*` (pure functions Phase 4). Contoh: service ambil price history penuh (perlu >= 201) untuk technical, hitung di sana, bukan handler.
+- Repository: tambah read methods (GetCompany, ListCompanies, GetPriceHistory, GetRecentStatements per period, GetLatestPrice, dan method gabungan utk screener) pada interface `QueryStore` baru (diimplementasikan Repository; di-fake utk unit test, pola sama seperti DataStore Phase 3).
+- **Prerequisite fix**: `InsertBalanceSheets` saat ini TIDAK menyimpan `shares_outstanding` (schema punya kolomnya, model punya field-nya, INSERT 9 kolom melewatkannya) -> P/B butuh argumen ini. Commit fix di awal Phase 5.
+
+### Commit plan (per concern, tidak digabung)
+1. fix(repository): persist shares_outstanding
+2. feat(handler): shared respond helper + error envelope + service.IsValidSymbol export
+3. feat(repository): read methods (QueryStore) + unit test
+4. feat(service): QueryService + unit test (fake store)
+5. feat(handler): companies endpoints (+ test)
+6. feat(handler): stocks data endpoints: history/income/balance/cash-flow (+ test)
+7. feat(handler+service): analytics & technical endpoints (SMA200 gap -> 422) (+ test)
+8. feat(handler+service): compare (+ test)
+9. feat(handler+service): screener SQL filtering (+ test)
+10. integration test handler di test/integration (pakai testcontainers yg ada), lalu close phase.
+
+Catatan non-scope fase ini: Redis caching sebelum analytics (section 9), auth/rate-limit middleware aktif (kontrak 429 disepakati). {: .no_match}
