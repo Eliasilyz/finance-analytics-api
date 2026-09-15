@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/eliasilyz/finance-analytics-api/internal/service"
 )
 
 func (h *Handler) analytics(c *gin.Context) {
@@ -13,20 +15,24 @@ func (h *Handler) analytics(c *gin.Context) {
 		return
 	}
 	writeData(c.Writer, http.StatusOK, gin.H{
-		"symbol": res.Symbol,
-		"price":  res.Price,
-		"metrics": gin.H{
-			"pe":              res.Metrics.PERatio,
-			"pb":              res.Metrics.PriceToBook,
-			"roe":             res.Metrics.ROE,
-			"roa":             res.Metrics.ROA,
-			"net_margin":      res.Metrics.NetMargin,
-			"current_ratio":   res.Metrics.CurrentRatio,
-			"debt_to_equity":  res.Metrics.DebtToEquity,
-			"revenue_growth":  res.Metrics.RevenueGrowth,
-			"earnings_growth": res.Metrics.EarningsGrowth,
-		},
+		"symbol":  res.Symbol,
+		"price":   res.Price,
+		"metrics": metricsJSON(res.Metrics),
 	})
+}
+
+func metricsJSON(m service.AnalyticsMetrics) gin.H {
+	return gin.H{
+		"pe":              m.PERatio,
+		"pb":              m.PriceToBook,
+		"roe":             m.ROE,
+		"roa":             m.ROA,
+		"net_margin":      m.NetMargin,
+		"current_ratio":   m.CurrentRatio,
+		"debt_to_equity":  m.DebtToEquity,
+		"revenue_growth":  m.RevenueGrowth,
+		"earnings_growth": m.EarningsGrowth,
+	}
 }
 
 func (h *Handler) technical(c *gin.Context) {

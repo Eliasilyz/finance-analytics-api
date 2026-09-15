@@ -126,3 +126,40 @@ func (s *QueryService) GetCashFlows(ctx context.Context, symbol, period string) 
 func (s *QueryService) wrapNotFound(err error) error {
 	return fmt.Errorf("%w: %v", ErrNotFound, err)
 }
+
+// Compare returns the analytics metrics for each symbol, computed through the
+// same path as GetAnalytics. ALL-OR-NOTHING (per the API decision): any
+// syntactically invalid, duplicate, or out-of-range symbol fails the whole
+// call with ErrInvalidSymbol; the first symbol that is unknown (ErrNotFound)
+// or data-starved (ErrInsufficientData) likewise aborts the whole call.
+func (s *QueryService) Compare(ctx context.Context, raw []string, max int) ([]AnalyticsResult, error) {
+	symbols := make([]string, 0, len(raw))
+	seen := make(map[string]bool, len(raw))
+	for _, item := range raw {
+		sym, err := normalizeSymbol(item)
+		if err != nil {
+			return nil, err
+		}
+		if len(symbols) >= max {
+			return nil, fmt.Errorf("%w: at most %d symbols", ErrInvalidSymbol, max)
+		}
+		if seen[sym] {
+			return nil, fmt.Errorf("%w: duplicate symbol %q", ErrInvalidSymbol, sym)
+		}
+		seen[sym] = true
+		symbols = append(symbols, sym)
+	}
+	if len(symbols) == 0 {
+		return nil, fmt.Errorf("%w: at least one symbol is required", ErrInvalidSymbol)
+	}
+
+	out := make([]AnalyticsResult, 0, len(symbols))
+	for _, sym := range symbols {
+		res, err := s.GetAnalytics(ctx, sym)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, res)
+	}
+	return out, nil
+}

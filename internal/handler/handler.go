@@ -37,6 +37,8 @@ func (h *Handler) Routes(r *gin.Engine) *gin.Engine {
 
 		api.GET("/stocks/:symbol/analytics", h.analytics)
 		api.GET("/stocks/:symbol/technical", h.technical)
+
+		api.GET("/compare", h.compare)
 	}
 	return r
 }
