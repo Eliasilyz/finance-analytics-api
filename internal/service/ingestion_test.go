@@ -17,7 +17,7 @@ import (
 type fakeStore struct {
 	companyID    int64
 	runs         []models.IngestionRun
-	inserted     map[string]int64 // prices | income | balance
+	inserted     map[string]int64 // prices | income | balance | cashflow
 	upsertErr    error
 	insertErr    map[string]error
 	recordRunErr error
@@ -57,6 +57,13 @@ func (f *fakeStore) InsertBalanceSheets(_ context.Context, _ int64, _ []models.B
 	return f.inserted["balance"], nil
 }
 
+func (f *fakeStore) InsertCashFlows(_ context.Context, _ int64, _ []models.CashFlow) (int64, error) {
+	if err := f.insertErr["cashflow"]; err != nil {
+		return 0, err
+	}
+	return f.inserted["cashflow"], nil
+}
+
 func (f *fakeStore) RecordRun(_ context.Context, run models.IngestionRun) error {
 	if f.recordRunErr != nil {
 		return f.recordRunErr
@@ -82,6 +89,9 @@ func validSnapshot() provider.CompanySnapshot {
 		Balance: []models.BalanceSheet{
 			{Period: "annual", FiscalDate: time.Date(2023, 9, 30, 0, 0, 0, 0, time.UTC), TotalAssets: 352583000000},
 		},
+		CashFlow: []models.CashFlow{
+			{Period: "annual", FiscalDate: time.Date(2023, 9, 30, 0, 0, 0, 0, time.UTC), OperatingCashFlow: 110543000000, NetChangeInCash: -73000000},
+		},
 	}
 }
 
@@ -91,6 +101,7 @@ func TestIngestSuccess(t *testing.T) {
 	store.inserted["prices"] = 2
 	store.inserted["income"] = 1
 	store.inserted["balance"] = 1
+	store.inserted["cashflow"] = 1
 
 	svc := NewIngestionService(&mocks.MockProvider{Snapshot: validSnapshot()}, store, testLogger())
 	run, err := svc.Ingest(context.Background(), "aapl")
@@ -103,7 +114,7 @@ func TestIngestSuccess(t *testing.T) {
 	if run.Symbol != "AAPL" {
 		t.Errorf("expected normalized symbol AAPL, got %q", run.Symbol)
 	}
-	if run.PricesInserted != 2 || run.IncomeInserted != 1 || run.BalanceInserted != 1 {
+	if run.PricesInserted != 2 || run.IncomeInserted != 1 || run.BalanceInserted != 1 || run.CashFlowInserted != 1 {
 		t.Errorf("unexpected insert counts: %+v", run)
 	}
 	if len(store.companies) != 1 || store.companies[0].Symbol != "AAPL" {
@@ -183,12 +194,14 @@ func TestIngestNormalizesInvalidRows(t *testing.T) {
 	store.inserted["prices"] = 1
 	store.inserted["income"] = 1
 	store.inserted["balance"] = 1
+	store.inserted["cashflow"] = 1
 	snap := validSnapshot()
 	// One good row + one malformed row; malformed must be dropped, not fail.
 	snap.Prices = append(snap.Prices, models.DailyPrice{
 		Date: time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC), Open: 0, High: 0, Low: 0, Close: 0, Volume: 0,
 	})
 	snap.Income = append(snap.Income, models.IncomeStatement{Period: "bogus", FiscalDate: time.Time{}})
+	snap.CashFlow = append(snap.CashFlow, models.CashFlow{Period: "bogus", FiscalDate: time.Time{}})
 
 	svc := NewIngestionService(&mocks.MockProvider{Snapshot: snap}, store, testLogger())
 	run, err := svc.Ingest(context.Background(), "AAPL")

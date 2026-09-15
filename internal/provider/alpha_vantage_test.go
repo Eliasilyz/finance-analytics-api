@@ -38,6 +38,8 @@ func TestFetchCompanySnapshotSuccess(t *testing.T) {
 			w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","totalRevenue":"383285000000","grossProfit":"169148000000","operatingIncome":"114301000000","netIncome":"96995000000","dilutedEPS":"6.16"}],"quarterlyReports":[{"fiscalDateEnding":"2024-03-30","totalRevenue":"90753000000","grossProfit":"38959000000","operatingIncome":"27511000000","netIncome":"23636000000","dilutedEPS":"1.53"}]}`))
 		case "BALANCE_SHEET":
 			w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","totalAssets":"352583000000","totalLiabilities":"290437000000","totalShareholderEquity":"62146000000","totalDebt":"120820000000","currentAssets":"143566000000","currentLiabilities":"145308000000","commonStockSharesOutstanding":"15550107000"}],"quarterlyReports":[]}`))
+		case "CASH_FLOW":
+			w.Write([]byte(`{"annualReports":[{"fiscalDateEnding":"2023-09-30","operatingCashflow":"110543000000","investingCashflow":"-28431000000","financingCashflow":"-36551000000","changeInCashAndCashEquivalents":"-73300000"}],"quarterlyReports":[]}`))
 		default:
 			t.Errorf("unexpected function %q", fn)
 		}
@@ -69,6 +71,13 @@ func TestFetchCompanySnapshotSuccess(t *testing.T) {
 	}
 	if len(snap.Balance) != 1 || snap.Balance[0].TotalAssets != 352583000000 || snap.Balance[0].SharesOutstanding != 15550107000 {
 		t.Errorf("unexpected balance sheet: %+v", snap.Balance)
+	}
+	if len(snap.CashFlow) != 1 || snap.CashFlow[0].Period != "annual" ||
+		snap.CashFlow[0].OperatingCashFlow != 110543000000 ||
+		snap.CashFlow[0].InvestingCashFlow != -28431000000 ||
+		snap.CashFlow[0].FinancingCashFlow != -36551000000 ||
+		snap.CashFlow[0].NetChangeInCash != -73300000 {
+		t.Errorf("unexpected cash flow: %+v", snap.CashFlow)
 	}
 }
 
@@ -133,7 +142,7 @@ func TestFetchCompanySnapshotSkipsMalformedRows(t *testing.T) {
 				"not-a-date":{"1. open":"a","2. high":"b","3. low":"c","4. close":"d","5. volume":"e"},
 				"2024-01-02":{"1. open":"188.40","2. high":"190.20","3. low":"187.90","4. close":"190.00","5. volume":"68451234"}
 			}}`))
-		case "INCOME_STATEMENT", "BALANCE_SHEET":
+		case "INCOME_STATEMENT", "BALANCE_SHEET", "CASH_FLOW":
 			w.Write([]byte(`{"annualReports":[],"quarterlyReports":[]}`))
 		}
 	})

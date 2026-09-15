@@ -38,6 +38,9 @@ func TestIngestPipelineEndToEnd(t *testing.T) {
 		Balance: []models.BalanceSheet{
 			{Period: "annual", FiscalDate: time.Date(2023, 9, 30, 0, 0, 0, 0, time.UTC), TotalAssets: 352583000000, TotalEquity: 62146000000},
 		},
+		CashFlow: []models.CashFlow{
+			{Period: "annual", FiscalDate: time.Date(2023, 9, 30, 0, 0, 0, 0, time.UTC), OperatingCashFlow: 110543000000, NetChangeInCash: -73300000},
+		},
 	}
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -61,6 +64,7 @@ func TestIngestPipelineEndToEnd(t *testing.T) {
 	var (
 		companyID            int64
 		priceCount, incCount int
+		cfCount              int
 	)
 	if err := db.QueryRow(`SELECT id FROM companies WHERE symbol = 'AAPL'`).Scan(&companyID); err != nil {
 		t.Fatalf("company not persisted: %v", err)
@@ -76,6 +80,12 @@ func TestIngestPipelineEndToEnd(t *testing.T) {
 	}
 	if incCount != 1 {
 		t.Errorf("expected 1 income row, got %d", incCount)
+	}
+	if err := db.QueryRow(`SELECT COUNT(*) FROM cash_flow_statements WHERE company_id = $1`, companyID).Scan(&cfCount); err != nil {
+		t.Fatalf("count cash flow: %v", err)
+	}
+	if cfCount != 1 {
+		t.Errorf("expected 1 cash flow row, got %d", cfCount)
 	}
 
 	// Second run is idempotent: same data already stored -> no new rows.
