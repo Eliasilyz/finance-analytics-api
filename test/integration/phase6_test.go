@@ -50,7 +50,7 @@ func seedAAPL(t *testing.T, db *sql.DB) {
 		{"2023-09-30", 383000000000, 96900000000, 6.16},
 	} {
 		if _, err := db.ExecContext(ctx,
-			`INSERT INTO income_statements (company_id,period,fiscal_date,revenue,net_income,dilated_eps)
+			`INSERT INTO income_statements (company_id,period,fiscal_date,revenue,net_income,diluted_eps)
 			 VALUES ($1,'annual',$2,$3,$4,$5)`, cid, r.fy, r.rev, r.ni, r.eps); err != nil {
 			t.Fatalf("insert income: %v", err)
 		}
