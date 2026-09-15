@@ -96,10 +96,11 @@ Aturan error wrapping untuk layer baru (khususnya analytics/service di Phase 4-5
 Semua fungsi pure (no I/O); input disiapkan di layer service lalu di-pass sebagai parameter. Konvensi: rasio fundamental `func X(numerator, denominator float64) (float64, error)`; indikator teknikal berbasis harga `func X(prices []float64, window int) ([]float64, error)` — return series penuh, error kalau data kurang/kosong. Harga = close dari `models.DailyPrice` (service yang ekstrak).
 
 ### Valuation (section 6)
-- P/E = close_price / dilutedEPS laporan tahun fiskal terakhir (annual). Bukan TTM. Alasan: konsisten dengan Revenue/Earnings Growth yang juga annual-to-annual; TTM perlu menyusun 4 kuartal terakhir dan membuat metric tak konsisten antar-company pada waktu pengungkapan berbeda. TTM jadi upgrade opsional.
+- P/E = close_price / dilutedEPS laporan tahun fiskal terakhir (annual). Bukan TTM.
+  - Alasan annual vs TTM: laporan tahunan selalu lengkap & bisa dibandingkan antar-perusahaan pada periode yang sama; TTM harus menjumlahkan 4 kuartal terakhir yang waktu publikasinya beda-beda per perusahaan, menyulitkan perbandingan konsisten. Memilih annual; TTM = upgrade opsional bila user butuh.
   - eps == 0 -> error; eps < 0 -> dikembalikan sebagai P/E negatif (valid, "company rugi").
 - P/B = close_price / book_value_per_share, BVPS = totalShareholderEquity / commonStockSharesOutstanding.
-  - equity <= 0 atau shares <= 0 -> error.
+  - equity <= 0 atau sharesOutstanding <= 0 -> error, termasuk saat sharesOutstanding = 0 atau tidak tersedia datanya (nilai 0) — pola sama seperti rasio lain: return error, bukan panic/Inf.
 
 ### Profitability
 - ROE = net income / total shareholder equity; equity <= 0 -> error (denominator negatif mengubah makna). Net income negatif valid -> ROE negatif.
@@ -122,7 +123,8 @@ Semua fungsi pure (no I/O); input disiapkan di layer service lalu di-pass sebaga
 - EMA = seed SMA(window) lalu EMA_t = close_t*a + EMA_{t-1}*(1-a), a = 2/(window+1). Default window 20. Formula standar Wilder-independent EMA.
 - RSI (period 14, **Wilder's smoothing**): delta = close_t - close_{t-1}; gain/loss per day. Seed: simple mean gain/loss window pertama (14). Selanjutnya Wilder smoothing: avg = (prev*(n-1) + cur)/n. RS = avgGain/avgLoss; RSI = 100 - 100/(1+RS). Edge: loss==0 && gain>0 -> RSI=100; gain==0 && loss==0 (harga konstan) -> RSI=50 (netral). Butuh len >= n+1.
   - MENENTUKAN vs SMA-approach: Wilder's smoothing adalah standar de facto (standar Wilder 1978, dipakai TradingView/stockscharts); RSI versi simple-moving-average (disetaraakan dengan Wilder) menghasilkan nilai berbeda signifikan dan tidak konsisten dengan mean-reversion thresholds 30/70 yang familiar. Pilih Wilder.
-- volatility = sample standard deviation (ddof=1) dari daily returns, window default 20 hari, **TIDAK di-annualized** (daily vol). Alasan: konsisten dengan metri "daily return"; window pendek mencerminkan kondisi terkini; annualization (x sqrt(252)) adalah transformasi skalar yang bisa dilakukan caller bila endpoint butuh. Butuh len >= window+1 (karena butuh returns dalam window).
+- volatility = sample standard deviation (ddof=1) dari daily returns, window default 20 hari, **TIDAK di-annualized** (daily vol). Butuh len >= window+1 (karena butuh returns dalam window).
+  - Alasan non-annualized vs annualized: konsisten dengan metric "daily return" di konteks yang sama (baik angka maupun skala); window pendek mencerminkan kondisi terkini; annualization (x sqrt(252)) adalah transformasi skalar sederhana yang bisa dilakukan caller bila endpoint butuh, dan mengasumsikan 252 trading day yang tak kami paksakan.
 - average volume = mean(volume di window), default 20 hari. Butuh len >= window.
 
 ### Edge case lintas fungsi (DoD)
