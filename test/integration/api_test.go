@@ -38,8 +38,6 @@ func TestAPIEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("insert company: %v", err)
 	}
-	// 60 trading days ending 2024-09-30.
-	start := time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)
 	for _, row := range []struct {
 		fy      string
 		revenue float64
