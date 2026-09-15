@@ -159,8 +159,13 @@ func TestFetchCompanySnapshotSkipsMalformedRows(t *testing.T) {
 }
 
 func TestFetchCompanySnapshotTimeout(t *testing.T) {
+	// Provider that never answers within the caller's deadline: server stalls
+	// 200ms while the ctx expires at 50ms. Asserts the client surfaces a
+	// sentinel-wrapped error well before the server would have responded —
+	// proving it times out instead of hanging or panicking.
+	const serverDelay = 200 * time.Millisecond
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond)
+		time.Sleep(serverDelay)
 		w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(srv.Close)
@@ -168,10 +173,29 @@ func TestFetchCompanySnapshotTimeout(t *testing.T) {
 	av := &AlphaVantage{
 		baseURL: srv.URL,
 		apiKey:  "test-key",
-		client:  &http.Client{Timeout: 50 * time.Millisecond},
+		client:  &http.Client{Timeout: 30 * time.Second}, // generous; ctx is the deadline
 	}
-	_, err := av.FetchCompanySnapshot(context.Background(), "AAPL")
-	if err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
-		t.Fatalf("expected timeout error, got %v", err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	_, err := av.FetchCompanySnapshot(ctx, "AAPL")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	// The client wraps transport failures in ErrProviderFailed (provider layer's
+	// contract), and the deadline must surface, not vanish into a generic error.
+	if !errors.Is(err, ErrProviderFailed) {
+		t.Errorf("expected wrapped ErrProviderFailed, got %v", err)
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "deadline exceeded") {
+		t.Errorf("expected deadline error, got %v", err)
+	}
+	// Timeout must fire before the server would have answered.
+	if elapsed >= serverDelay {
+		t.Errorf("client hung instead of timing out: returned after %v (server answers at %v)", elapsed, serverDelay)
 	}
 }
