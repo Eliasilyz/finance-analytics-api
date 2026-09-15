@@ -67,12 +67,14 @@
 - Opsi lain ditolak: go-redis/v8; miniredis; mockery/gomock (code-gen overhead).
 
 ### 16. Provider interface: satu method, satu snapshot utuh (Phase 3, 2026-09-15)
-- Chosen: `FinancialDataProvider.FetchCompanySnapshot(ctx, symbol)` mengembalikan `CompanySnapshot{Company, Prices, Income, Balance}` — semua endpoint Alpha Vantage (OVERVIEW, TIME_SERIES_DAILY, INCOME_STATEMENT, BALANCE_SHEET) dalam SATU pemanggilan; kegagalan endpoint mana pun menggagalkan snapshot.
+- Chosen: `FinancialDataProvider.FetchCompanySnapshot(ctx, symbol)` mengembalikan `CompanySnapshot{Company, Prices, Income, Balance, CashFlow}` — semua endpoint Alpha Vantage (OVERVIEW, TIME_SERIES_DAILY, INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW) dalam SATU pemanggilan; kegagalan endpoint mana pun menggagalkan snapshot.
 - Why: spec II.1 provider abstraction + ingestion wajib log sukses/gagal per run. Satu snapshot = satu run yang atomik, status integrity terjaga; alternatif per-endpoint menambah state complexity tanpa kebutuhan nyata saat ini.
-- Note: CASH FLOW tidak di-fetch (tidak ada fitur yang memakainya) — ditunda, cukup tambah `fetchStatements` bila dipakai.
+- Note: CASH FLOW DI-FETCH sejak Phase 3. Tabel `cash_flow_statements` sudah ada dari migration Phase 2 (000001) dan dipakai endpoint `/cash-flow` di Phase 5, jadi gap sengaja ditutup sekarang (bukan ditunda) supaya Phase 5 tinggal query, tidak balik ke ingestion. Amplop CASH_FLOW diparse via `fetchStatements`+`parseCashFlow` (operating/investing/financing/net-change), disimpan idempoten, jumlah baris dicatat di `ingestion_runs.cash_flow_inserted`.
+- Revisi (2026-09-15): keputusan awal yang menunda cash flow DIKOREKSI atas permintaan user karena alasan sebelumnya keliru (mengira tak ada consumer padahal Phase 5 sudah menetapkan endpoint `/cash-flow` dan tabel sudah ada sejak Phase 2). Tidak ada open item tersisa dari revisi ini.
 - Note: money disimpan sebagai float64 (`NUMERIC` di Postgres menerimanya); skala ini tidak sensitif desimal bank.
 
 ### 17. Ingestion audit: ingestion_runs + ON CONFLICT DO NOTHING (Phase 3, 2026-09-15)
 - Chosen: tabel `ingestion_runs` (migration 000002) mencatat setiap run sukses/gagal + jumlah baris ter-insert + error; seluruh insert data idempoten via `ON CONFLICT DO NOTHING` (company di-upsert via `ON CONFLICT (symbol) DO UPDATE ... RETURNING id`).
 - Why: spec II.2 (proses ingestion tercatat, sukses/gagal terlihat); re-ingest data yang sudah ada = run sukses dengan hitungan 0, tidak duplikat.
-- Note: protokol validasi di trust boundary (symbol regex `^[A-Z0-9.]{1,10}$`, harga non-negatif + high>=low, fiscal date non-zero, period annual|quarterly); baris invalid dibuang, bukan menghentikan run (kecuali tidak ada satu pun harga valid -> run failure).
+- Note: protokol validasi di trust boundary (symbol regex `^[A-Z0-9.]{1,10}$`, harga non-negatif + high>=low, fiscal date non-zero, period annual|quarterly); baris invalid dibuang, bukan menghentikan run (kecuali tidak ada satu pun harga valid -> run failure). IngestionRun menambahkan kolom `cash_flow_inserted`.
+- Revisi (2026-09-15): field `cash_flow_inserted` ditambahkan ke model IngestionRun saat koreksi cash flow; tabel `ingestion_runs` belum di-deploy ke env manapun jadi tidak butuh migrasi baru.
