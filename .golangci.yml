@@ -6,8 +6,3 @@ linters:
     - misspell
     - unconvert
     - whitespace
-
-issues:
-  exclude-generated: exclude
-  exclude-dirs:
-    - vendor
