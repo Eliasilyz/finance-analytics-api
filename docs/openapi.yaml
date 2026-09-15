@@ -1,0 +1,593 @@
+openapi: 3.0.3
+info:
+  title: Finance Data Analytics API
+  description: |
+    A financial data analytics API that ingests company and price data from an
+    external provider (Alpha Vantage), stores it in PostgreSQL, computes its own
+    financial and technical metrics, and serves the results over a REST API
+    protected by API keys.
+
+    All `/api/v1` endpoints require the `X-API-Key` header and are rate limited
+    per API key. `/health` is unauthenticated.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+
+tags:
+  - name: Operations
+  - name: Companies
+  - name: Stock Data
+  - name: Analytics
+  - name: Comparison
+  - name: Screener
+
+security:
+  - apiKey: []
+
+paths:
+  /health:
+    get:
+      tags: [Operations]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+                required: [data]
+
+  /api/v1/companies:
+    get:
+      tags: [Companies]
+      summary: List all companies
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: All companies (never null)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CompanySummary'
+                required: [data]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/companies/{symbol}:
+    get:
+      tags: [Companies]
+      summary: Get a single company by symbol
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Company details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Company'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/stocks/{symbol}/history:
+    get:
+      tags: [Stock Data]
+      summary: Daily OHLCV price history
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+        - in: query
+          name: limit
+          description: Maximum number of rows (ascending by date). Absent means all.
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Price history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DailyPrice'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/stocks/{symbol}/income-statement:
+    get:
+      tags: [Stock Data]
+      summary: Income statements
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/Period'
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Income statement rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IncomeStatement'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/stocks/{symbol}/balance-sheet:
+    get:
+      tags: [Stock Data]
+      summary: Balance sheets
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/Period'
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Balance sheet rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/BalanceSheet'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/stocks/{symbol}/cash-flow:
+    get:
+      tags: [Stock Data]
+      summary: Cash flow statements
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+        - $ref: '#/components/parameters/Period'
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Cash flow rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CashFlow'
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/stocks/{symbol}/analytics:
+    get:
+      tags: [Analytics]
+      summary: Financial metric analysis for a stock
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Current price and financial metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      symbol:
+                        type: string
+                        example: AAPL
+                      price:
+                        type: number
+                        example: 191.2
+                      metrics:
+                        $ref: '#/components/schemas/Metrics'
+                    required: [symbol, price, metrics]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/InsufficientData'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/stocks/{symbol}/technical:
+    get:
+      tags: [Analytics]
+      summary: Technical indicators for a stock
+      parameters:
+        - $ref: '#/components/parameters/Symbol'
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Technical indicator values
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      symbol:
+                        type: string
+                        example: AAPL
+                      last_date:
+                        type: string
+                        format: date
+                        example: '2024-01-03'
+                      values:
+                        type: object
+                        properties:
+                          daily_return: { type: number, nullable: true }
+                          sma20: { type: number, nullable: true }
+                          sma50: { type: number, nullable: true }
+                          sma200: { type: number, nullable: true }
+                          ema20: { type: number, nullable: true }
+                          rsi14: { type: number, nullable: true }
+                          volatility20: { type: number, nullable: true }
+                          average_volume20: { type: number, nullable: true }
+                    required: [symbol, last_date, values]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/InsufficientData'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/compare:
+    get:
+      tags: [Comparison]
+      summary: Compare metrics across up to 10 symbols
+      parameters:
+        - in: query
+          name: symbols
+          required: true
+          description: Comma-separated symbol list (max 10)
+          schema:
+            type: string
+            example: AAPL,MSFT
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Per-symbol metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        symbol:
+                          type: string
+                          example: AAPL
+                        metrics:
+                          $ref: '#/components/schemas/Metrics'
+                      required: [symbol, metrics]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+  /api/v1/screener:
+    get:
+      tags: [Screener]
+      summary: Filter stocks by sector and fundamental thresholds
+      parameters:
+        - in: query
+          name: sector
+          required: false
+          schema:
+            type: string
+            example: Technology
+        - in: query
+          name: min_roe
+          required: false
+          schema:
+            type: number
+            example: 0.1
+        - in: query
+          name: max_pe
+          required: false
+          schema:
+            type: number
+            example: 30
+        - in: query
+          name: min_revenue_growth
+          required: false
+          schema:
+            type: number
+            example: 0.05
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Matching companies
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        symbol: { type: string, example: AAPL }
+                        name: { type: string, example: Apple Inc. }
+                        sector: { type: string, example: Technology }
+                        roe: { type: number, nullable: true }
+                        pe: { type: number, nullable: true }
+                        revenue_growth: { type: number, nullable: true }
+                      required: [symbol, name, sector]
+                required: [data]
+        '400':
+          $ref: '#/components/responses/Validation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '500':
+          $ref: '#/components/responses/Internal'
+
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API key issued by the keygen CLI (format `fda_` + 64 hex chars).
+
+  parameters:
+    Symbol:
+      in: path
+      name: symbol
+      required: true
+      description: Stock ticker (e.g. AAPL)
+      schema:
+        type: string
+        pattern: '^[A-Z0-9.\-]{1,10}$'
+        example: AAPL
+    Period:
+      in: query
+      name: period
+      required: false
+      description: Statement period filter
+      schema:
+        type: string
+        enum: [annual, quarterly, all]
+        default: annual
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Validation:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    NotFound:
+      description: Symbol not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    InsufficientData:
+      description: Not enough data to compute a metric
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    RateLimited:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Internal:
+      description: Unexpected internal error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum: [VALIDATION_ERROR, NOT_FOUND, INSUFFICIENT_DATA, RATE_LIMITED, UNAUTHORIZED, INTERNAL]
+            message:
+              type: string
+          required: [code, message]
+      required: [error]
+
+    CompanySummary:
+      type: object
+      properties:
+        symbol: { type: string, example: AAPL }
+        name: { type: string, example: Apple Inc. }
+        exchange: { type: string, example: NASDAQ }
+        sector: { type: string, example: Technology }
+        industry: { type: string, example: Consumer Electronics }
+        currency: { type: string, example: USD }
+      required: [symbol, name, exchange, sector, industry, currency]
+
+    Company:
+      allOf:
+        - $ref: '#/components/schemas/CompanySummary'
+        - type: object
+          properties:
+            description: { type: string, example: Design and manufacture smartphones. }
+          required: [description]
+
+    DailyPrice:
+      type: object
+      properties:
+        date: { type: string, format: date, example: '2024-01-03' }
+        open: { type: number, example: 190.5 }
+        high: { type: number, example: 192.6 }
+        low: { type: number, example: 189.7 }
+        close: { type: number, example: 191.2 }
+        volume: { type: integer, example: 71234567 }
+      required: [date, open, high, low, close, volume]
+
+    IncomeStatement:
+      type: object
+      properties:
+        period: { type: string, enum: [annual, quarterly], example: annual }
+        fiscal_date: { type: string, format: date, example: '2023-09-30' }
+        revenue: { type: number, example: 383285000000 }
+        net_income: { type: number, example: 96995000000 }
+        diluted_eps: { type: number, example: 6.16 }
+      required: [period, fiscal_date]
+
+    BalanceSheet:
+      type: object
+      properties:
+        period: { type: string, enum: [annual, quarterly], example: annual }
+        fiscal_date: { type: string, format: date, example: '2023-09-30' }
+        total_assets: { type: number, example: 352583000000 }
+        total_liabilities: { type: number, example: 290437000000 }
+        total_equity: { type: number, example: 62146000000 }
+        total_debt: { type: number, example: 120820000000 }
+        current_assets: { type: number, example: 143566000000 }
+        current_liabilities: { type: number, example: 145308000000 }
+        shares_outstanding: { type: number, example: 15550107000 }
+      required: [period, fiscal_date]
+
+    CashFlow:
+      type: object
+      properties:
+        period: { type: string, enum: [annual, quarterly], example: annual }
+        fiscal_date: { type: string, format: date, example: '2023-09-30' }
+        operating_cash_flow: { type: number, example: 110543000000 }
+        investing_cash_flow: { type: number, example: -28431000000 }
+        financing_cash_flow: { type: number, example: -36551000000 }
+        net_change_in_cash: { type: number, example: -73300000 }
+      required: [period, fiscal_date]
+
+    Metrics:
+      type: object
+      description: Computed financial ratios. Any field may be null when input data is insufficient.
+      properties:
+        pe: { type: number, nullable: true, example: 28.4 }
+        pb: { type: number, nullable: true, example: 8.1 }
+        roe: { type: number, nullable: true, example: 0.156 }
+        roa: { type: number, nullable: true, example: 0.027 }
+        net_margin: { type: number, nullable: true, example: 0.253 }
+        current_ratio: { type: number, nullable: true, example: 0.98 }
+        debt_to_equity: { type: number, nullable: true, example: 1.94 }
+        revenue_growth: { type: number, nullable: true, example: 0.082 }
+        earnings_growth: { type: number, nullable: true, example: 0.147 }
