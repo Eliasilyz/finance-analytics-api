@@ -282,20 +282,37 @@ func TestInjectionResistantSQL(t *testing.T) {
 	seedAAPL(t, db)
 	r, raw, _ := authStack(t, db, rdb, 1000, 1000, nil)
 
-	// Symbol-shaped injections must be rejected before user input reaches SQL.
-	// The rejection code may be 400 (IsValidSymbol) or 404 (gin can't route a
-	// decoded slash), never 2xx (handler ran) and never 5xx (crash).
-	evilSymbols := []string{
+	// Symbol-shaped injections that REACH IsValidSymbol (no "/" so Gin routes
+	// them to the handler) must be rejected by the validator itself: exactly
+	// 400 VALIDATION_ERROR with a clear validation message — not a router 404.
+	validatorRejected := []string{
 		"AAPL'); DROP TABLE companies;--",
 		"' OR '1'='1",
-		"<script>alert(1)</script>",
-		"..",
+		"<script>alert(1)",
+		"AAPL;SELECT pg_sleep(5)",
 	}
-	for _, sym := range evilSymbols {
+	for _, sym := range validatorRejected {
+		path := "/api/v1/stocks/" + url.PathEscape(sym) + "/analytics"
+		code, body := authedGet(t, r, path, raw)
+		if code != http.StatusBadRequest {
+			t.Fatalf("symbol %q: want 400 from IsValidSymbol, got %d %s", sym, code, body)
+		}
+		if !strings.Contains(body, `"code":"VALIDATION_ERROR"`) || !strings.Contains(body, "invalid symbol") {
+			t.Fatalf("symbol %q: want VALIDATION_ERROR with clear message, got %s", sym, body)
+		}
+	}
+
+	// Symbol-shaped payloads whose raw "/" breaks the Gin route are rejected
+	// BEFORE the handler. Router 404 is equally safe (never reaches SQL), so
+	// the invariant is: 4xx, never 2xx (handler ran) and never 5xx (crash).
+	routeRejected := []string{
+		"<script>alert(1)</script>",
+	}
+	for _, sym := range routeRejected {
 		path := "/api/v1/stocks/" + url.PathEscape(sym) + "/analytics"
 		code, body := authedGet(t, r, path, raw)
 		if code < 400 || code >= 500 {
-			t.Fatalf("symbol %q: want 4xx, got %d %s", sym, code, body)
+			t.Fatalf("symbol %q: want router 4xx, got %d %s", sym, code, body)
 		}
 	}
 
