@@ -89,7 +89,7 @@ func TestMigrationsRunUpAndDown(t *testing.T) {
 
 	for _, table := range []string{
 		"companies", "price_history", "income_statements",
-		"balance_sheets", "cash_flow_statements",
+		"balance_sheets", "cash_flow_statements", "ingestion_runs",
 	} {
 		var exists bool
 		err := db.QueryRow(
