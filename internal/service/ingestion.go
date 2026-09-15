@@ -32,6 +32,11 @@ var (
 
 var symbolRe = regexp.MustCompile(`^[A-Z0-9.]{1,10}$`)
 
+// IsValidSymbol reports whether s (already trimmed/uppercased) is an
+// acceptable stock symbol. Shared by ingestion and the REST API handlers so
+// validation is defined once, not duplicated per layer.
+func IsValidSymbol(s string) bool { return symbolRe.MatchString(s) }
+
 // IngestionService executes the fetch -> validate -> normalize -> persist
 // pipeline and records every attempt (success or failure) in ingestion_runs.
 type IngestionService struct {
@@ -135,7 +140,7 @@ func (s *IngestionService) Ingest(ctx context.Context, symbol string) (models.In
 // normalizeSymbol uppercases and validates an input symbol.
 func normalizeSymbol(symbol string) (string, error) {
 	sym := strings.ToUpper(strings.TrimSpace(symbol))
-	if !symbolRe.MatchString(sym) {
+	if !IsValidSymbol(sym) {
 		return "", fmt.Errorf("%w: %q", ErrInvalidSymbol, symbol)
 	}
 	return sym, nil
