@@ -99,19 +99,19 @@ func (r *Repository) InsertBalanceSheets(ctx context.Context, companyID int64, s
 	if len(sheets) == 0 {
 		return 0, nil
 	}
-	const cols = 9
+	const cols = 10
 	vals := make([]string, 0, len(sheets))
 	args := make([]any, 0, len(sheets)*cols)
 	for i, s := range sheets {
 		base := i * cols
-		vals = append(vals, fmt.Sprintf(`($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)`,
-			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9))
+		vals = append(vals, fmt.Sprintf(`($%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d,$%d)`,
+			base+1, base+2, base+3, base+4, base+5, base+6, base+7, base+8, base+9, base+10))
 		args = append(args, companyID, s.Period, s.FiscalDate,
 			s.TotalAssets, s.TotalLiabilities, s.TotalEquity,
-			s.TotalDebt, s.CurrentAssets, s.CurrentLiabilities)
+			s.TotalDebt, s.CurrentAssets, s.CurrentLiabilities, s.SharesOutstanding)
 	}
 	query := `
-		INSERT INTO balance_sheets (company_id, period, fiscal_date, total_assets, total_liabilities, total_equity, total_debt, current_assets, current_liabilities)
+		INSERT INTO balance_sheets (company_id, period, fiscal_date, total_assets, total_liabilities, total_equity, total_debt, current_assets, current_liabilities, shares_outstanding)
 		VALUES ` + strings.Join(vals, ",") + `
 		ON CONFLICT (company_id, period, fiscal_date) DO NOTHING`
 	res, err := r.db.ExecContext(ctx, query, args...)
