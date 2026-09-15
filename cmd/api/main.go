@@ -4,12 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"log/slog"
 	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/eliasilyz/finance-analytics-api/internal/handler"
+	"github.com/eliasilyz/finance-analytics-api/internal/repository"
+	"github.com/eliasilyz/finance-analytics-api/internal/service"
 )
 
 func main() {
@@ -42,10 +47,13 @@ func main() {
 	}
 	log.Println("connected to redis")
 
+	repo := repository.NewRepository(db)
+	qs := service.NewQueryService(repo)
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
+	h := handler.New(qs, logger)
 	r := gin.Default()
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok"})
-	})
+	h.Routes(r)
 
 	port := os.Getenv("PORT")
 	if port == "" {
