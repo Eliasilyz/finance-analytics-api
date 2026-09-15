@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,10 +15,13 @@ import (
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/lib/pq"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/eliasilyz/finance-analytics-api/migrations"
 )
 
 // migrationsSourceURL returns a golang-migrate file source URL for the
@@ -158,4 +162,77 @@ func isUniqueViolation(err error) bool {
 		return pe.Code == "23505"
 	}
 	return false
+}
+
+// TestMigrationsEmbedUp exercises the EXACT migration path cmd/api/main.go uses
+// (embedded FS + iofs driver), not the file:// source: a fresh Postgres bootstraps
+// every table, and a second Up is an idempotent no-op (container restart case).
+func TestMigrationsEmbedUp(t *testing.T) {
+	pg, err := postgres.Run(context.Background(),
+		"postgres:16-alpine",
+		postgres.WithDatabase("finance_test"),
+		postgres.WithUsername("postgres"),
+		postgres.WithPassword("postgres"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(90*time.Second)),
+	)
+	if err != nil {
+		t.Fatalf("start postgres container: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = pg.Terminate(context.Background())
+	})
+
+	dsn, err := pg.ConnectionString(context.Background(), "sslmode=disable")
+	if err != nil {
+		t.Fatalf("connection string: %v", err)
+	}
+
+	newMigrator := func() *migrate.Migrate {
+		src, err := iofs.New(migrations.FS, ".")
+		if err != nil {
+			t.Fatalf("iofs source: %v", err)
+		}
+		m, err := migrate.NewWithSourceInstance("iofs", src, dsn)
+		if err != nil {
+			t.Fatalf("migrate instance: %v", err)
+		}
+		t.Cleanup(func() { m.Close() })
+		return m
+	}
+
+	m := newMigrator()
+	if err := m.Up(); err != nil {
+		t.Fatalf("first Up: %v", err)
+	}
+
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	for _, table := range []string{
+		"companies", "price_history", "income_statements",
+		"balance_sheets", "cash_flow_statements", "ingestion_runs", "api_keys",
+	} {
+		var exists bool
+		if err := db.QueryRow(
+			"SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = $1)",
+			table,
+		).Scan(&exists); err != nil {
+			t.Fatalf("check table %s: %v", table, err)
+		}
+		if !exists {
+			t.Errorf("table %s does not exist after embedded migrate up", table)
+		}
+	}
+
+	// Idempotency: a restarted container (same volume) must not error.
+	m2 := newMigrator()
+	if err := m2.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		t.Fatalf("second Up should be ErrNoChange, got: %v", err)
+	}
 }

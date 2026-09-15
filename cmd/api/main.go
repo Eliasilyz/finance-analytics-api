@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"log"
 	"log/slog"
 	"os"
@@ -10,6 +11,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-migrate/migrate/v4"
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 
@@ -19,7 +23,28 @@ import (
 	"github.com/eliasilyz/finance-analytics-api/internal/rate"
 	"github.com/eliasilyz/finance-analytics-api/internal/repository"
 	"github.com/eliasilyz/finance-analytics-api/internal/service"
+	"github.com/eliasilyz/finance-analytics-api/migrations"
 )
+
+// migrateUp applies pending embedded migrations. It is idempotent: a restart
+// against an already-migrated database is a no-op (ErrNoChange), which is
+// exactly what `docker compose up` on a warmed volume needs.
+func migrateUp(dbURL string) {
+	src, err := iofs.New(migrations.FS, ".")
+	if err != nil {
+		log.Fatalf("migrate source setup failed: %v", err)
+	}
+	m, err := migrate.NewWithSourceInstance("iofs", src, dbURL)
+	if err != nil {
+		log.Fatalf("migrate setup failed: %v", err)
+	}
+	defer m.Close()
+
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		log.Fatalf("migrate up failed: %v", err)
+	}
+	log.Println("migrations applied (or already up to date)")
+}
 
 func main() {
 	dbURL := mustEnv("DATABASE_URL")
@@ -38,6 +63,8 @@ func main() {
 		log.Fatalf("db ping failed: %v", err)
 	}
 	log.Println("connected to postgres")
+
+	migrateUp(dbURL)
 
 	rdbOpts, err := redis.ParseURL(redisURL)
 	if err != nil {
