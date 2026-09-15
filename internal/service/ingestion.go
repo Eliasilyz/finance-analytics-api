@@ -42,12 +42,19 @@ func IsValidSymbol(s string) bool { return symbolRe.MatchString(s) }
 type IngestionService struct {
 	provider provider.FinancialDataProvider
 	store    DataStore
+	cache    Cache
 	log      *slog.Logger
 }
 
-// NewIngestionService wires the pipeline.
-func NewIngestionService(p provider.FinancialDataProvider, store DataStore, logger *slog.Logger) *IngestionService {
-	return &IngestionService{provider: p, store: store, log: logger}
+// NewIngestionService wires the pipeline. A cache is optional: when present,
+// a successful Ingest deletes that symbol's cached analytics/technical
+// results so the API never serves stale numbers after fresh data lands.
+func NewIngestionService(p provider.FinancialDataProvider, store DataStore, logger *slog.Logger, cache ...Cache) *IngestionService {
+	s := &IngestionService{provider: p, store: store, log: logger}
+	if len(cache) > 0 {
+		s.cache = cache[0]
+	}
+	return s
 }
 
 // Ingest pulls a company snapshot for symbol, validates and normalizes it, then
@@ -126,6 +133,16 @@ func (s *IngestionService) Ingest(ctx context.Context, symbol string) (models.In
 	run.FinishedAt = time.Now()
 	if recErr := s.store.RecordRun(ctx, run); recErr != nil {
 		return run, fmt.Errorf("ingestion succeeded but audit failed: %w", recErr)
+	}
+	// Fresh data invalidates the read-through cache for this symbol; a stale
+	// analytics/technical response after an ingestion would be a correctness
+	// regression, so deletion is best-effort but logged when it fails.
+	if s.cache != nil {
+		for _, k := range []string{"analytics:" + sym, "technical:" + sym} {
+			if err := s.cache.Del(ctx, k); err != nil {
+				s.log.Warn("cache invalidation failed", "symbol", sym, "key", k, "error", err)
+			}
+		}
 	}
 	s.log.Info("ingestion complete",
 		"symbol", sym,
