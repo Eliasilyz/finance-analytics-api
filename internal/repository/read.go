@@ -13,14 +13,16 @@ import (
 // symbol is not present.
 func (r *Repository) GetCompany(ctx context.Context, symbol string) (models.Company, error) {
 	var c models.Company
+	var desc sql.NullString
 	err := r.db.QueryRowContext(ctx, `
 		SELECT symbol, name, exchange, sector, industry, currency, description
 		FROM companies WHERE symbol = $1`,
 		symbol,
-	).Scan(&c.Symbol, &c.Name, &c.Exchange, &c.Sector, &c.Industry, &c.Currency, &c.Description)
+	).Scan(&c.Symbol, &c.Name, &c.Exchange, &c.Sector, &c.Industry, &c.Currency, &desc)
 	if err != nil {
 		return models.Company{}, fmt.Errorf("get company: %w", err)
 	}
+	c.Description = desc.String
 	return c, nil
 }
 
@@ -37,10 +39,12 @@ func (r *Repository) ListCompanies(ctx context.Context) ([]models.Company, error
 	var out []models.Company
 	for rows.Next() {
 		var c models.Company
+		var desc sql.NullString
 		if err := rows.Scan(&c.Symbol, &c.Name, &c.Exchange, &c.Sector,
-			&c.Industry, &c.Currency, &c.Description); err != nil {
+			&c.Industry, &c.Currency, &desc); err != nil {
 			return nil, fmt.Errorf("scan company: %w", err)
 		}
+		c.Description = desc.String
 		out = append(out, c)
 	}
 	return out, rows.Err()
