@@ -82,3 +82,11 @@
 ### 18. Error wrapping: double %w agar errors.Is bisa menjangkau context.DeadlineExceeded (Phase 3, 2026-09-15)
 - Temuan empiris (bukan asumsi): `http.Client.Do` mengembalikan `*url.Error` yang membungkus `context.deadlineExceededError`, dan `errors.Is(doErr, context.DeadlineExceeded)` bernilai TRUE. Namun wrapper lama `fmt.Errorf("%w: %v", ErrProviderFailed, err)` memasukkan error asli hanya sebagai TEKS pesan (%v), bukan ke unwrap chain — akibatnya `errors.Is(err, context.DeadlineExceeded)` pada error akhir selalu false. Kesimpulan bahwa "Go HTTP client tidak mengekspos sentinel" yang sempat ditulis di test terlalu dini adalah SALAH setelah dibuktikan dengan debug; akar masalah adalah wrapper sendiri.
 - Fix: `fmt.Errorf("%w: %w", ErrProviderFailed, err)` (Go 1.20+ mendukung multiple %w) sehingga chain menyimpan KEDUA sentinel. Test `TestFetchCompanySnapshotTimeout` sekarang meng-assert `errors.Is(err, context.DeadlineExceeded)` sebagai bukti paling langsung bahwa kegagalan memang karena deadline, plus `errors.Is(err, ErrProviderFailed)` sebagai kontrak provider layer.
+
+## GUIDANCE (berlaku semua phase ke depan, bukan kasus tertutup)
+
+Aturan error wrapping untuk layer baru (khususnya analytics/service di Phase 4-5):
+1. Kalau error hasil wrap masih perlu di-match lewat `errors.Is` / `errors.As` di rantai atas, gunakan `%w`, BUKAN `%v`. Format `%w: %v` memasukkan error asli hanya sebagai teks pesan dan memutus unwrap chain — class of bug yang terbukti nyata di proyek ini (#18), bukan sekadar teori.
+2. Jangan asumsikan HTTP client / library tidak mengekspos sentinel (mis. context.DeadlineExceeded). Sebelum meng-claim, buktikan dengan men-dump unwrap chain (`errors.Is` per level) seperti di #18 — biasanya `%w` di wrapper sendiri, bukan library, yang menimbun chain.
+3. Golden rule: `%v` hanya untuk detail diagnosis yang sengaja TIDAK ingin bisa di-match (mis. status code lengkap); kalau ragu, `%w` lebih aman — error message tetap terbentuk dari kedua nilai.
+4. Hint kapan `%w: %v` dipertanyakan: message error yang panjang (`: ...`) tapi rantai errors.Is pendek.
