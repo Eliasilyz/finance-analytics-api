@@ -2,8 +2,11 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/eliasilyz/finance-analytics-api/internal/service"
 )
 
 // errorEnvelope is the single error shape every handler returns.
@@ -46,5 +49,20 @@ func writeData(w http.ResponseWriter, status int, data any) {
 func logError(log *slog.Logger, err error) {
 	if log != nil {
 		log.Error("internal error", "error", err)
+	}
+}
+
+// writeServiceError maps QueryService errors onto the shared error envelope.
+func writeServiceError(w http.ResponseWriter, log *slog.Logger, err error) {
+	switch {
+	case errors.Is(err, service.ErrInvalidSymbol):
+		writeError(w, http.StatusBadRequest, codeValidation, err.Error())
+	case errors.Is(err, service.ErrNotFound):
+		writeError(w, http.StatusNotFound, codeNotFound, err.Error())
+	case errors.Is(err, service.ErrInsufficientData):
+		writeError(w, http.StatusUnprocessableEntity, codeInsufficient, err.Error())
+	default:
+		logError(log, err)
+		writeError(w, http.StatusInternalServerError, codeInternal, "internal error")
 	}
 }
