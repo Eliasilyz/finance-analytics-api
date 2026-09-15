@@ -228,7 +228,7 @@ func TestRateLimitsAtThreshold(t *testing.T) {
 	var lastStatus int
 	var lastBody string
 	for i := 1; i <= 4; i++ {
-		lastStatus, lastBody = doRequest(r, "/api/v1/stocks/aapl")
+		lastStatus, lastBody = doRequest(r, "/api/v1/companies")
 	}
 	if lastStatus != http.StatusTooManyRequests {
 		t.Fatalf("4th request: status %d, want 429", lastStatus)
@@ -270,7 +270,7 @@ func TestRedisDownFailsOpen(t *testing.T) {
 
 	// Rate limiter fail-open: despite limit=3, no request is rejected.
 	for i := 1; i <= 5; i++ {
-		code, _ := doRequest(r, "/api/v1/stocks/aapl")
+		code, _ := doRequest(r, "/api/v1/companies")
 		if code == http.StatusTooManyRequests {
 			t.Fatalf("dead limiter must fail open, rejected on attempt %d", i)
 		}
