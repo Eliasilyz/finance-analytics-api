@@ -24,6 +24,7 @@ const (
 	codeNotFound     = "NOT_FOUND"
 	codeInsufficient = "INSUFFICIENT_DATA"
 	codeRateLimited  = "RATE_LIMITED"
+	codeUnauthorized = "UNAUTHORIZED"
 	codeInternal     = "INTERNAL"
 )
 

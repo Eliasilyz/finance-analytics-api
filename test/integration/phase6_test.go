@@ -135,7 +135,7 @@ func buildStack(t *testing.T, db *sql.DB, rdb *redis.Client, limit int64) (*gin.
 		lim = rate.NewRedis(rdb, limit, time.Hour)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	h := handler.New(qs, logger, lim)
+	h := handler.New(qs, logger, handler.Options{Limiter: lim})
 	r := gin.New()
 	h.Routes(r)
 	return r, counting, rcache

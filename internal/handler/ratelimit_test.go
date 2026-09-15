@@ -23,7 +23,7 @@ func (f *fakeLimiter) Allow(_ context.Context, _ string) (bool, error) {
 
 func newRateLimitedRouter(limiter *fakeLimiter) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	h := New(service.NewQueryService(&queryStoreStub{}), slog.New(slog.DiscardHandler), limiter)
+	h := New(service.NewQueryService(&queryStoreStub{}), slog.New(slog.DiscardHandler), Options{Limiter: limiter})
 	e := gin.New()
 	h.Routes(e)
 	return e

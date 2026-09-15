@@ -13,6 +13,7 @@ import (
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/eliasilyz/finance-analytics-api/internal/auth"
 	"github.com/eliasilyz/finance-analytics-api/internal/cache"
 	"github.com/eliasilyz/finance-analytics-api/internal/handler"
 	"github.com/eliasilyz/finance-analytics-api/internal/rate"
@@ -58,11 +59,21 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	repo := repository.NewRepository(db)
 	qs := service.NewQueryService(repo, cache.NewRedis(rdb, 15*time.Minute))
+	authSvc := auth.NewService(repo, logger)
 	limiter := rate.NewRedis(rdb,
 		int64(envInt("RATE_LIMIT_LIMIT", 100)),
 		time.Duration(envInt("RATE_LIMIT_WINDOW_SECONDS", 60))*time.Second)
+	// Loose per-IP guard for failed-auth floods only. Threshold is far above
+	// the per-key limit on purpose: it is a safety net, not rate limiting.
+	authGuard := rate.NewRedis(rdb,
+		int64(envInt("AUTH_GUARD_IP_LIMIT", 500)),
+		time.Duration(envInt("AUTH_GUARD_IP_WINDOW_SECONDS", 60))*time.Second)
 
-	h := handler.New(qs, logger, limiter)
+	h := handler.New(qs, logger, handler.Options{
+		Auth:      authSvc,
+		Limiter:   limiter,
+		AuthGuard: authGuard,
+	})
 	r := gin.Default()
 	h.Routes(r)
 
