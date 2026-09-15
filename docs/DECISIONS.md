@@ -25,6 +25,7 @@
 - Chosen: API key hashed (bcrypt) in DB, checked via X-API-Key header. Full design logged here before Phase 7.
 - Why: Spec allows API key or simple JWT. API key simpler; bcrypt hash means no plaintext secret at rest.
 - Rejected: JWT (unnecessary complexity), OAuth (out of scope).
+- **SUPERSEDED (Phase 7, 2026-09-15)**: hash diubah dari bcrypt ke SHA-256 — lihat bagian "Phase 7 — API Key Auth & Per-Key Rate Limiting".
 
 ### 6. Provider: Alpha Vantage
 - Chosen: Alpha Vantage REST API, interface-based client.
@@ -218,23 +219,7 @@ Catatan non-scope fase ini: Redis caching sebelum analytics (section 9), auth/ra
 - **Algoritma**: Redis `INCR` + conditional `EXPIRE` (fixed-window). Pilihan atas setTimeout: lebih sederhana, cukup akurat untuk use-case ini (non-HFT, hanya melindungi dari abuse/spike), kompatibel dengan Redis minimal.
 - **Scope**: per IP (`c.ClientIP()`); key `fda:rl:{IP}`.
 - **Counter semantics**: SEMUA request `/api/v1` dihitung terlepas hasilnya (200, 400, 404, 422, 500) — request yang gagal validasi tetap menghabiskan slot; memaksa attacker submit request invalid juga membakar limitnya sendiri.
-- **`/health` dikec she he she.... she.但她... she she...*
-
-.. the she.*
-
-.. than she she...*
-
- the usual she.... usual she.... than she does doesn time. lines sketches shading.*
-
-.*
-
-. lines outline's... if no the4 it..,.`—it punch before the)->� traces with.>
-
- autonomous enough."</'t it a6 a.
- sketchesThe eyes calculate."}
- seeably.)
-: **key ."): like缠? owns those with, the the the'll.. on illustrate.kes and and the intest redraw thatباتا.
-
+- **`/health` excluded**: Docker healthcheck setiap 10s akan menandai container unhealthy jika kena 429; health probe di-route terpisah, di luar group `/api/v1` yang diproteksi middleware.
 - **Env**: `RATE_LIMIT_LIMIT` (default 100), `RATE_LIMIT_WINDOW_SECONDS` (default 60). Via `cmd/api/main.go` env parsing dengan fallback.
 - **Fail-open**: jika Redis unreachable → `limiter.Allow` error → request diperbolehkan tanpa batas (availability > protection sementara). Logged via `slog.Warn`. Client timeouts 300ms = fail-open tidak hang.
 - **`/health` excluded**: Docker healthcheck setiap 10s akan menandai container unhealthy jika kena 429; health probe di-route terpisah, di luar group `/api/v1` yang diproteksi middleware.
@@ -258,3 +243,32 @@ Keduanya ditest secara terpisah: unit test (`TestCacheUnavailableFailsOpen`, `Te
 - Unit test hijau: `go test ./internal/...` — handler, service, rate (cache).
 - Integration test compiles & green: `test/integration/phase6_test.go` (testcontainers Redis + Postgres, live assertions).
 - CI: push to master, GitHub Actions run green (build + integration jobs).
+
+---
+
+## Phase 7 — API Key Auth & Per-Key Rate Limiting (CLOSED, 2026-09-15)
+
+### API key keamanan — supersede #5 (bcrypt → SHA-256)
+- **Key format**: `fda_` + 32 byte `crypto/rand` → 64 hex (256-bit entropy). Lookup prefix 8 char (32-bit) disimpan terpisah & di-index; `key_hash CHAR(64) UNIQUE` = SHA-256 (bukan bcrypt). Tabel `api_keys` (migration 000003): id, key_prefix, key_hash, label, created_at, expires_at (nullable), revoked_at (nullable).
+- **Alasan ganti bcrypt**: token 256-bit acak (bukan password manusia) membuat brute-force tak layak walau seluruh DB bocor — SHA-256 cukup. bcrypt menambah ~50-100ms/request tanpa keamanan riil. (Sama seperti GitHub/GitLab yang menyimpan token SHA-256, bukan slow hash.)
+- **Raw key ditampilkan SEKALI** saat `create` (via `cmd/keygen`), tidak pernah tersimpan/terlog; DB hanya menyimpan hash.
+- **Rejection uniform**: `ErrInvalidKey` → 401 `UNAUTHORIZED` untuk missing/malformed/unknown/revoked/expired — tanpa oracle (client tidak bisa membedakan penyebab).
+- Validasi 8-char prefix milik beberapa key (collision 32-bit kecil tapi mungkin) → `GetAPIKeysByPrefix` mengembalikan SEMUA lalu compare hash satu per satu dengan `subtle.ConstantTimeCompare`.
+
+### Rate limiting: per-IP → per-API-key (menjalankan kewajiban OPEN_ITEMS [KEDEPAN])
+- **Primary**: bucket per-key `fda:rl:key:{api_key_id}`. **Counter semantics berubah**: hanya request yang autentik (ber-key valid) dihitung ke bucket per-key — berubah dari Phase 6 yang menghitung semua `/api/v1` per-IP.
+- **Per-IP retired untuk data endpoints**; fallback per-IP `fda:rl:ip:` hanya untuk request unauthenticated (nil-auth = dev/test).
+- **Auth-failure flood guard (keamanan per-IP yang TETAP dipakai)**: guard terpisah, key `authfail:{IP}`, HANYA dihitung saat auth GAGAL — request ber-key valid tidak menyentuh guard. Threshold longgar & terpisah (`AUTH_GUARD_IP_LIMIT` default 500, `AUTH_GUARD_IP_WINDOW_SECONDS` default 60). Redis down → fail-open (sesuai kebijakan Phase 6). Ditambahkan atas permintaan user agar tidak menunggu follow-up.
+- Env baru: `AUTH_GUARD_IP_LIMIT`, `AUTH_GUARD_IP_WINDOW_SECONDS`. Limiter existing (`RATE_LIMIT_LIMIT`/WINDOW) sekarang diterapkan per-key.
+- Middleware order group `/api/v1`: `authRequire` → `rateLimit`; `/health` tetap publik.
+
+### Commit plan (per concern)
+1. `6e5dff1` — migration 000003 + model APIKey + repository CRUD + auth.Service + unit test
+2. `2864d79` — handler Options{Auth,Limiter,AuthGuard}, authRequire, per-key rateLimit, auth-failure guard, codeUnauthorized, main wiring + unit test
+3. `9aafd21` — cmd/keygen CLI (create/list/revoke)
+4. `511eabb` — integration Phase 7 DoD suite (real Postgres+Redis)
+
+### Bukti (verification DoD)
+- Unit hijau: `go test ./internal/...`, `go vet ./...`.
+- Integration testcontainers hijau: auth paths, revoked/expired, per-key isolation, flood guard per-IP, fail-open Redis down, injection resize (symbol/sector hostile ditolak 4xx & tabel utuh).
+- DoD OPEN_ITEMS [KEDEPAN] per-API-key: TERCAPAI — kebijakan final per-key tercatat di bagian ini.
